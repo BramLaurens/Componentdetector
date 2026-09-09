@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <esp_camera.h>
 #include "RTSPConfig.h" // Include a RTSPConfig.h file if want to change defined options
 #include <ESP32-RTSPServer.h>
 
@@ -35,7 +36,7 @@ const char *rtspUser = "";
 const char *rtspPassword = "";
 
 // Set camera quality parameter
-int quality = 10;
+int quality = 5;
 
 bool setupCamera() {
   camera_config_t config;
