@@ -93,8 +93,9 @@ def edge_detection(photo):
 
 
 # Create the necessary lists in the test_result_dict, every test needs a list.
+# In this list the quantified result of each test is saved
 test_result_dict["contour_detection"] = []
-test_result_dict["edge_derection"] = []
+test_result_dict["edge_detection"] = []
 
 
 # Run for every photo in the test
@@ -109,19 +110,19 @@ for file_name in glob.glob(TESTPHOTO_PATH + "/*.png"):
 
 
     ##-- Testing --##
-    # test_result_dict["test1"].append( contour_detection(photo))
-    test_result_dict["test1"].append( edge_detection(photo))
+    # test_result_dict["contour_detection"].append( contour_detection(photo))
+    test_result_dict["edge_detection"].append( edge_detection(photo))
 
 
+    ##-- Other test data (for plotting) --##
     # Save the current photo count in the same list position as the test results
     test_result_dict["photo_number"].append(photo_count)
 
     # Save the current Object name in the same list position as the test results
     file_component_name = file_name.split("\\")[-1]                     # Get the last string after "\"
     file_component_name = file_component_name.split("_")[0]             # Remove the .png
-    test_result_dict["photo_component_name"].append(file_name.split)
+    test_result_dict["photo_component_name"].append(file_component_name)
 
     photo_count += 1
-
 
 print("Total photos tested: {}".format(photo_count))
