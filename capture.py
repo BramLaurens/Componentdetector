@@ -17,15 +17,18 @@ ser = serial.Serial(
     timeout=1
 )
 
+#rotate the circle
 def rotate(angle):
     ser.write(f"ROTATE {angle}\r\n".encode())
 
+#control the LED
 def led(state):
     if state:
         ser.write(b"LED ON\r\n")
     else:
         ser.write(b"LED OFF\r\n")
 
+#open stream called by button, creates a popup window and starts a new thread to open the stream
 def open_stream():
     global stream
 
@@ -48,6 +51,7 @@ def open_stream():
         daemon=True
     ).start()
 
+#error popup handler, shows a popup with the error message
 def show_error_popup(message):
     error_popup = customtkinter.CTkToplevel(app)
     error_popup.title("Error")
@@ -60,6 +64,7 @@ def show_error_popup(message):
     ok_button = customtkinter.CTkButton(error_popup, text="OK", command=lambda: error_popup.destroy())
     ok_button.pack(pady=10)
 
+#stream opening backend function, called in a separate thread to avoid blocking the main GUI thread
 def open_stream_thread(popup):
     global stream
 
@@ -100,21 +105,30 @@ def open_stream_thread(popup):
             lambda: show_error_popup(f"Camera error:\n{e}")
         )
 
+#frame update function, calls itself every 10ms to update the video frame in the GUI
 def update_frame():
+    #only update the frame if the stream is open
     if stream is not None:
 
+        #read a frame from the stream
         ret, frame = stream.read()
+
+        #only process the frame if it was read successfully
         if ret:
+            #convert the color space from BGR to RGB
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
+            #convert the frame to a PIL image
             img = Image.fromarray(frame)
 
+            #convert the PIL image to a CTkImage for display in the customtkinter GUI
             imgtk = customtkinter.CTkImage(
                 light_image=img,
                 dark_image=img,
                 size=(640, 480)
             )
 
+            #update the video label with the new image
             video.configure(image=imgtk)
             video.imgtk = imgtk
 
@@ -139,6 +153,7 @@ stream_button.grid(row=0, column=3, padx=10, pady=10)
 video = customtkinter.CTkLabel(app, width=640, height=480)
 video.grid(row=1, column=0, columnspan=3, padx=10, pady=10)
 
+#make the columns expand equally when the window is resized
 app.grid_columnconfigure(0, weight=1)
 app.grid_columnconfigure(1, weight=1)
 app.grid_columnconfigure(2, weight=1)
