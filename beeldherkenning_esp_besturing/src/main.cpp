@@ -4,8 +4,8 @@
 
 constexpr uint8_t LED_PIN = 5;
 constexpr uint16_t LED_COUNT = 24;
-constexpr uint8_t STEPPER_DIR_PIN = 18;
-constexpr uint8_t STEPPER_STEP_PIN = 19;
+constexpr uint8_t STEPPER_DIR_PIN = 19;
+constexpr uint8_t STEPPER_STEP_PIN = 18;
 
 constexpr float MOTOR_STEP_ANGLE_DEGREES = 0.9f;
 constexpr uint8_t MICROSTEPS = 8;
