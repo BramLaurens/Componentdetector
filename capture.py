@@ -1,20 +1,46 @@
 import serial
+import serial.tools.list_ports
 import customtkinter
 import time
 import cv2
 from PIL import Image, ImageTk
 import threading
 
+app = customtkinter.CTk()
+app.title ("Beeldherkenning Capture Tool")
+app.geometry("1920x1080")
+
 stream = None
 stream_running = False
 
-ser = serial.Serial(
-    port="/dev/ttyUSB0",
-    baudrate=115200,
-    bytesize=serial.EIGHTBITS,
-    parity=serial.PARITY_NONE,
-    stopbits=serial.STOPBITS_ONE,
-    timeout=1
+current_componenttype = customtkinter.StringVar(value="Resistor")
+selected_port = None
+
+ser = None
+
+def port_selection_callback(choice):
+    global selected_port
+    selected_port = choice
+    print(f"Selected port: {choice}")
+
+ports = [port.device for port in serial.tools.list_ports.comports()]
+
+def open_serial_connection():
+    global ser
+
+    if ser is not None and ser.is_open:
+        print("Serial connection is already open.")
+        return
+    ser = serial.Serial()
+    ser.port=selected_port
+    ser.baudrate=115200
+    ser.bytesize=serial.EIGHTBITS
+    ser.parity=serial.PARITY_NONE
+    ser.stopbits=serial.STOPBITS_ONE
+    ser.timeout=1
+
+    ser.open()
+    print(f"Opened serial connection on {ser.port}"
 )
 
 #rotate the circle
@@ -38,7 +64,7 @@ def open_stream():
     #create connecting popup window
     popup = customtkinter.CTkToplevel(app)
     popup.title("Connecting")
-    popup.geometry("300x100")
+    popup.geometry("1000x300")
     popup.transient(app)
 
     text = customtkinter.CTkLabel(popup, text="Connecting to the camera...")
@@ -118,14 +144,14 @@ def update_frame():
             #convert the color space from BGR to RGB
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            #convert the frame to a PIL image
+            #convert the frame from numpy array to a PIL image
             img = Image.fromarray(frame)
 
             #convert the PIL image to a CTkImage for display in the customtkinter GUI
             imgtk = customtkinter.CTkImage(
                 light_image=img,
                 dark_image=img,
-                size=(640, 480)
+                size=(1280, 720)
             )
 
             #update the video label with the new image
@@ -134,9 +160,37 @@ def update_frame():
 
         app.after(10, update_frame)
 
-app = customtkinter.CTk()
-app.title ("Beeldherkenning Capture Tool")
-app.geometry("2000x300")
+def capture_frame():
+    if stream is not None:
+        ret, frame = stream.read()
+        if ret:
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            filename = f"capture_{timestamp}.jpg"
+            cv2.imwrite(filename, frame)
+            print(f"Captured frame saved as {filename}")
+
+def close_stream():
+    global stream
+    if stream is not None:
+        stream.release()
+        stream = None
+        print("Stream closed.")
+
+def combobox_callback(choice):
+    global current_componenttype
+    current_componenttype.set(choice)
+
+    print(f"Selected component type: {current_componenttype.get()}")
+
+combobox = customtkinter.CTkComboBox(
+    app, values=["Resistor", "Capacitor", "Inductor", "Diode", "Transistor"], 
+    command=combobox_callback, 
+    variable=current_componenttype)
+
+serial_combobox = customtkinter.CTkComboBox(
+    app, 
+    values=ports,
+    command=port_selection_callback)
 
 button = customtkinter.CTkButton(app, text="Rotate 90°", width=200, height=100, command=lambda: rotate(90))
 button.grid(row=0, column=0, padx=10, pady=10)
@@ -150,13 +204,37 @@ button3.grid(row=0, column=2, padx=10, pady=10)
 stream_button = customtkinter.CTkButton( app, text="Open stream", width=200, height=100, command=open_stream )
 stream_button.grid(row=0, column=3, padx=10, pady=10)
 
-video = customtkinter.CTkLabel(app, width=640, height=480)
-video.grid(row=1, column=0, columnspan=3, padx=10, pady=10)
+close_stream_button = customtkinter.CTkButton( app, text="Close stream", width=200, height=100, command=close_stream )
+close_stream_button.grid(row=0, column=4, padx=10, pady=10)
+
+open_serial_button = customtkinter.CTkButton( app, text="Open serial connection", width=200, height=100, command=open_serial_connection )
+open_serial_button.grid(row=3, column=1, padx=10, pady=10)
+
+
+
+combobox.grid(row=1, column=0, padx=10, pady=10)
+serial_combobox.grid(row=2, column=0, padx=10, pady=10)
+
+video = customtkinter.CTkLabel(
+    app,
+    width=640,
+    height=480,
+    text=""
+)
+
+video.grid(
+    row=1,
+    column=1,
+    columnspan=3,
+    padx=10,
+    pady=10
+)
 
 #make the columns expand equally when the window is resized
 app.grid_columnconfigure(0, weight=1)
 app.grid_columnconfigure(1, weight=1)
 app.grid_columnconfigure(2, weight=1)
 app.grid_columnconfigure(3, weight=1)
+app.grid_columnconfigure(4, weight=1)
 
 app.mainloop()
