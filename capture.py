@@ -5,6 +5,10 @@ import time
 import cv2
 from PIL import Image, ImageTk
 import threading
+import os
+
+#surpress ffmpeg log messages
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "loglevel;error"
 
 app = customtkinter.CTk()
 app.title ("Beeldherkenning Capture Tool")
@@ -12,6 +16,9 @@ app.geometry("1920x1080")
 
 stream = None
 stream_running = False
+latest_frame = None
+frame_lock = threading.Lock()
+stream_lock = threading.Lock()
 
 current_componenttype = customtkinter.StringVar(value="Resistor")
 selected_port = None
@@ -92,7 +99,7 @@ def show_error_popup(message):
 
 #stream opening backend function, called in a separate thread to avoid blocking the main GUI thread
 def open_stream_thread(popup):
-    global stream
+    global stream, stream_running
 
     url = "rtsp://192.168.4.1/mjpeg/1"
 
@@ -108,6 +115,8 @@ def open_stream_thread(popup):
 
         if new_stream.isOpened():
             stream = new_stream
+            stream_running = True
+            threading.Thread(target=stream_thread, daemon=True).start()
 
             app.after(0, update_frame)
             app.after(0, popup.destroy)
@@ -131,56 +140,81 @@ def open_stream_thread(popup):
             lambda: show_error_popup(f"Camera error:\n{e}")
         )
 
+def stream_thread():
+    global latest_frame, stream_running
+    while stream_running:
+        if stream is not None:
+            with stream_lock:
+                ret, frame = stream.read()
+            if ret:
+                with frame_lock:
+                    latest_frame = frame
+
+
 #frame update function, calls itself every 10ms to update the video frame in the GUI
 def update_frame():
-    #only update the frame if the stream is open
-    if stream is not None:
+    global latest_frame
 
-        #read a frame from the stream
-        ret, frame = stream.read()
+    # Start the stream thread if it's not already running
+    with frame_lock:
+        if latest_frame is not None:
+            frame = latest_frame.copy()
+        else:
+            frame = None
+            
+    if frame is not None:
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        #only process the frame if it was read successfully
-        if ret:
-            #convert the color space from BGR to RGB
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(frame)
 
-            #convert the frame from numpy array to a PIL image
-            img = Image.fromarray(frame)
+        imgtk = customtkinter.CTkImage(
+            light_image=img,
+            dark_image=img,
+            size=(1280, 720)
+        )
 
-            #convert the PIL image to a CTkImage for display in the customtkinter GUI
-            imgtk = customtkinter.CTkImage(
-                light_image=img,
-                dark_image=img,
-                size=(1280, 720)
-            )
+        video.configure(image=imgtk, text="")
+        video.imgtk = imgtk
 
-            #update the video label with the new image
-            video.configure(image=imgtk)
-            video.imgtk = imgtk
-
-        app.after(10, update_frame)
+    app.after(30, update_frame)
 
 def capture_frame():
-    if stream is not None:
-        ret, frame = stream.read()
-        if ret:
-            timestamp = time.strftime("%Y%m%d-%H%M%S")
-            filename = f"capture_{timestamp}.jpg"
-            cv2.imwrite(filename, frame)
-            print(f"Captured frame saved as {filename}")
+    with frame_lock:
+        if latest_frame is None:
+            return False
+        frame = latest_frame.copy()
+
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"capture_{timestamp}.jpg"
+    if cv2.imwrite(filename, frame):
+        print(f"Captured frame saved as {filename}")
+        return True
+    print(f"Failed to save frame as {filename}")
+    return False
 
 def close_stream():
-    global stream
-    if stream is not None:
-        stream.release()
-        stream = None
-        print("Stream closed.")
+    global stream, stream_running
+    stream_running = False
+    with stream_lock:
+        if stream is not None:
+            stream.release()
+            stream = None
+            print("Stream closed.")
 
 def combobox_callback(choice):
     global current_componenttype
     current_componenttype.set(choice)
 
     print(f"Selected component type: {current_componenttype.get()}")
+
+def autocapture():
+    threading.Thread(target=autocapture_thread, daemon=True).start()
+
+def autocapture_thread():
+    while True:
+        capture_frame()
+        print("Frame captured")
+        time.sleep(2)  # Capture every 5 seconds
 
 combobox = customtkinter.CTkComboBox(
     app, values=["Resistor", "Capacitor", "Inductor", "Diode", "Transistor"], 
@@ -191,6 +225,7 @@ serial_combobox = customtkinter.CTkComboBox(
     app, 
     values=ports,
     command=port_selection_callback)
+
 
 button = customtkinter.CTkButton(app, text="Rotate 90°", width=200, height=100, command=lambda: rotate(90))
 button.grid(row=0, column=0, padx=10, pady=10)
@@ -206,10 +241,11 @@ stream_button.grid(row=0, column=3, padx=10, pady=10)
 
 close_stream_button = customtkinter.CTkButton( app, text="Close stream", width=200, height=100, command=close_stream )
 close_stream_button.grid(row=0, column=4, padx=10, pady=10)
+start_autocapture_button = customtkinter.CTkButton( app, text="Start auto capture", width=200, height=100, command=autocapture )
+start_autocapture_button.grid(row=3, column=0, padx=10, pady=10)
 
 open_serial_button = customtkinter.CTkButton( app, text="Open serial connection", width=200, height=100, command=open_serial_connection )
 open_serial_button.grid(row=3, column=1, padx=10, pady=10)
-
 
 
 combobox.grid(row=1, column=0, padx=10, pady=10)
@@ -217,8 +253,8 @@ serial_combobox.grid(row=2, column=0, padx=10, pady=10)
 
 video = customtkinter.CTkLabel(
     app,
-    width=640,
-    height=480,
+    width=1280,
+    height=720,
     text=""
 )
 
