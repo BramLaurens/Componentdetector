@@ -15,12 +15,11 @@ import cv2 as cv                    # OpenCV provides vision algorithms and func
 import numpy as np                  # Numpy provides multiple handy functions to be used on (multiple dimension) arrays
 import matplotlib.pyplot as plt     # Matplotlib provides function to visualize the gathered information
 
-
 ENABLE_VERBOSE = True
 
 
 # Variables 
-TESTPHOTO_PATH = "photos/test_photos"   # Path where photos are found
+TESTPHOTO_PATH = "photos"               # Path where photos are found
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
@@ -250,7 +249,7 @@ test_result_dict["circumference"] = []
 
 
 # Run for every photo in the test
-for file_path in glob.glob(TESTPHOTO_PATH + "/*.png"):
+for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # Read image
     photo = cv.imread(file_path)
 
