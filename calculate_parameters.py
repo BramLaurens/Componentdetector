@@ -1,4 +1,4 @@
-# Filename:     autotest_script.py
+# Filename:     calculate_parameters.py
 # Author:       Fabian Meijneken & Bram Laurens
 # University:   Utrecht University of Applied Sciences
 # Course:       Beeldherkenning - VEBEHERK
