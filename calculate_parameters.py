@@ -206,7 +206,20 @@ def circumference(photo: cv.typing.MatLike):
     # cv.imshow("contour_test", photo_contours)
     '''
 
+    kernel2 = np.ones((15,15),np.uint8)
+    morph_close_img = cv.morphologyEx(laplacian_thresh, cv.MORPH_CLOSE, kernel2)
+    
+    contours, hierarchy = cv.findContours(morph_close_img, mode = cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_NONE)
+    photo_contours = np.copy(photo)
+    # Loop through each contour and assign a unique random BGR color
+    for i, cnt in enumerate(contours):
+        color = np.random.randint(0, 256, size=3).tolist()  # Generates (B, G, R)
+        cv.drawContours(photo_contours, contours, i, color, 2)
 
+    # cv.drawContours(photo_contours, contours, -1, (0, 0, 255), 2, cv.FILLED)
+    cv.imshow("contour_test", photo_contours)
+    
+    
 
     # Calculate the circumference by counting all the non zero pixels in the image.
     #   This works since the above threshold function creates a strict black(255) white(0) picture.
@@ -217,6 +230,7 @@ def circumference(photo: cv.typing.MatLike):
         print("Circunference: {}".format(circumference))
 
         cv.imshow("circumference", laplacian_thresh)
+        cv.imshow("MORPH_CLOSE", morph_close_img)
         cv.waitKey(0)
    
     return circumference
@@ -283,6 +297,9 @@ print("{} - Starting result visualisation".format(current_time()))
 # Use a subplot for futureproofing, alowing for more plots in 1 window in the future.
 #   If this is done "axs." needs to be replaced with "axs[x]." with x representing the plot
 fig, axs = plt.subplots(1)
+
+# Create colors for all scatter plots
+# for test_result_dict
 
 # Plot the component name vs circumference
 axs.scatter(test_result_dict["photo_component_name"], test_result_dict["circumference"])
