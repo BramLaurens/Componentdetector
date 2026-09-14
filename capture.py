@@ -10,6 +10,9 @@ import os
 #surpress ffmpeg log messages
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "loglevel;error"
 
+photos_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photos")
+os.makedirs(photos_directory, exist_ok=True)
+
 app = customtkinter.CTk()
 app.title ("Beeldherkenning Capture Tool")
 app.geometry("1920x1080")
@@ -22,6 +25,7 @@ stream_lock = threading.Lock()
 
 current_componenttype = customtkinter.StringVar(value="Resistor")
 selected_port = None
+auto_capture_enabled = False
 
 ser = None
 
@@ -185,11 +189,12 @@ def capture_frame():
         frame = latest_frame.copy()
 
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    filename = f"capture_{timestamp}.jpg"
-    if cv2.imwrite(filename, frame):
-        print(f"Captured frame saved as {filename}")
+    filename = f"{current_componenttype.get()}_{timestamp}.jpg"
+    filepath = os.path.join(photos_directory, filename)
+    if cv2.imwrite(filepath, frame):
+        print(f"Captured frame saved as {filepath}")
         return True
-    print(f"Failed to save frame as {filename}")
+    print(f"Failed to save frame as {filepath}")
     return False
 
 def close_stream():
@@ -208,16 +213,28 @@ def combobox_callback(choice):
     print(f"Selected component type: {current_componenttype.get()}")
 
 def autocapture():
+    global auto_capture_enabled
+    auto_capture_enabled = True
     threading.Thread(target=autocapture_thread, daemon=True).start()
 
 def autocapture_thread():
-    while True:
-        capture_frame()
-        print("Frame captured")
-        time.sleep(2)  # Capture every 5 seconds
+    if auto_capture_enabled:
+        while True:
+            if not auto_capture_enabled:
+                print("Auto capture stopped.")
+                break
+            rotate(10)
+            time.sleep(100/1000)  # Wait for 100 milliseconds
+            capture_frame()
+            print("Frame captured")
+            time.sleep(2)  # Capture every 5 seconds
 
+def stop_autocapture():
+    global auto_capture_enabled
+    auto_capture_enabled = False
+    
 combobox = customtkinter.CTkComboBox(
-    app, values=["Resistor", "Capacitor", "Inductor", "Diode", "Transistor"], 
+    app, values=["Resistor", "ElecCapacitor", "MKPCapacitor", "CerCapacitor","Inductor", "Diode", "Transistor", "ArduinoNano"], 
     command=combobox_callback, 
     variable=current_componenttype)
 
@@ -241,8 +258,12 @@ stream_button.grid(row=0, column=3, padx=10, pady=10)
 
 close_stream_button = customtkinter.CTkButton( app, text="Close stream", width=200, height=100, command=close_stream )
 close_stream_button.grid(row=0, column=4, padx=10, pady=10)
+
 start_autocapture_button = customtkinter.CTkButton( app, text="Start auto capture", width=200, height=100, command=autocapture )
 start_autocapture_button.grid(row=3, column=0, padx=10, pady=10)
+
+stop_autocapture_button = customtkinter.CTkButton( app, text="Stop auto capture", width=200, height=100, command=stop_autocapture )
+stop_autocapture_button.grid(row=3, column=2, padx=10, pady=10)
 
 open_serial_button = customtkinter.CTkButton( app, text="Open serial connection", width=200, height=100, command=open_serial_connection )
 open_serial_button.grid(row=3, column=1, padx=10, pady=10)
