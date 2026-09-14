@@ -1,8 +1,12 @@
-# 
-# Course: Beeldherkenning - VEBEHERK
-# Author Fabian Meijneken & Bram Laurens
-# 
-# A script that runs different tests on all photos in /photos/test_photos
+# Filename:     autotest_script.py
+# Author:       Fabian Meijneken & Bram Laurens
+# University:   Utrecht University of Applied Sciences
+# Course:       Beeldherkenning - VEBEHERK
+# Project:      Electrical Component detector
+#
+# Description:  This script applies multiple vision function to all photos in a defined folder. 
+#               The goal of this file is to extract certain parameters from the electrical components found in the image.
+#               With this informaten a decision engine can be used to determine what electrical component is inside the image.
 
 from datetime import datetime       # This library provides functions related to time.
 import glob                         # This library provides functions used to gather all the filepaths found in "\photos"
@@ -11,22 +15,25 @@ import cv2 as cv                    # OpenCV provides vision algorithms and func
 import numpy as np                  # Numpy provides multiple handy functions to be used on (multiple dimension) arrays
 import matplotlib.pyplot as plt     # Matplotlib provides function to visualize the gathered information
 
-ENABLE_VERBOSE = False
+
+ENABLE_VERBOSE = True
 
 
-TESTPHOTO_PATH = "photos/test_photos"
-
-test_result_dict = {
+# Variables 
+TESTPHOTO_PATH = "photos/test_photos"   # Path where photos are found
+photo_count = 0                         # Stores the total count of processed images
+test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
     "photo_component_name"  : []
 }
-photo_count = 0
+
 
 # A very simple function that returns a string of formatted time.
 def current_time():
     return datetime.now().strftime("%H:%M:%S.%f")
 
-##-- First tests / parameter test --##
+
+##-- First tests / parameter test (not used in final product)--##
 # Contour detection - Contour detection
 # No Quantified result yet
 def contour_detection(photo: cv.typing.MatLike):
@@ -143,6 +150,11 @@ def laplacian_param_test(photo: cv.typing.MatLike):
 
 
 ##-- Parameter functions --##
+
+# This function calculates the circumference in pixels.
+# Known limitations:
+#   - This function includes the connection arms found on all electrical components TODO Fix this
+#   - After the laplacian function, a couple white "blobs" can be seen in the background, these are also counted in the total circumference count.
 def circumference(photo: cv.typing.MatLike):
     # This function doesn't utelize color seen in the image
     photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
@@ -260,8 +272,9 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.png"):
     photo_count += 1
 
 
-
 print("{} - Done calculating. Total photos tested: {}".format(current_time(), photo_count))
+if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
+
 print("{} - Starting result visualisation".format(current_time()))
 
 
