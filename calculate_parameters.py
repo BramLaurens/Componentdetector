@@ -15,11 +15,11 @@ import cv2 as cv                    # OpenCV provides vision algorithms and func
 import numpy as np                  # Numpy provides multiple handy functions to be used on (multiple dimension) arrays
 import matplotlib.pyplot as plt     # Matplotlib provides function to visualize the gathered information
 
-ENABLE_VERBOSE = True
+ENABLE_VERBOSE = False
 
 
 # Variables 
-TESTPHOTO_PATH = "photos"               # Path where photos are found
+TESTPHOTO_PATH = "photos/Trainset_150901"               # Path where photos are found
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
@@ -161,7 +161,7 @@ def circumference(photo: cv.typing.MatLike):
     # Blur the photo with a kerkel size of 5x5.
         # The "0" defines sigmaX to 0, which means the standard deviation in the X direction is 0.
         # This results in an even blur
-    photo_blur = cv.GaussianBlur(photo_gray, (5,5), 0)
+    photo_blur = cv.GaussianBlur(photo_gray, (3,3), 0)
 
     # Apply OpenCV's laplacian formula to the photo. This function applies a laplacian Kernel, which measures (and highlights) a rapid changes in pixel intensity. 
     photo_laplacian = cv.Laplacian(photo_blur, cv.CV_8U, ksize=5)
@@ -171,52 +171,72 @@ def circumference(photo: cv.typing.MatLike):
     ret, laplacian_thresh = cv.threshold(photo_laplacian, 254, 255, cv.THRESH_BINARY)
 
 
-    ### TODO: REMOVE OR FIX
-    #   I tried to remove the connectors from the components leaving only the body. For this i tried using the contours function, but this didn't work because of the broken (holes) shape.
-    #   To fix this i tried dilating and eroding the shape with differently sized kernels.
-    ''' 
-    ## DILATE
-    # Make image thesame size as laplacian_thresh, but with all 0's
-    kernel = np.ones((5,5), np.uint8)
-    dialated_thresh = cv.dilate(laplacian_thresh, kernel, iterations=2)
 
-    ## ERODE
-    kernel = np.ones((2,2), np.uint8)
-    eroded_thresh = cv.erode(laplacian_thresh, kernel, iterations=1)
+    ## TESTING ##
 
-    # Contours
-    contours, hierarchy = cv.findContours(laplacian_thresh, mode = cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
-    photo_contours = np.copy(laplacian_thresh)
-    cv.drawContours(photo_contours, contours, -1, (0, 0, 255), 2, cv.FILLED)
+    '''
+    lines = cv.HoughLinesP(
+                laplacian_thresh, 
+                rho=1, 
+                theta=np.pi/180, 
+                threshold=40, 
+                minLineLength=150,  # <-- Crucial parameter!
+                maxLineGap=60
+            )
 
-    cv.imshow("circumference", laplacian_thresh)
-    # cv.imshow("edge", photo_contours)
-    # cv.imshow("dialated", dialated_thresh)
-    cv.imshow("eroded", eroded_thresh)
-    cv.waitKey(0)
+    output_hough = cv.cvtColor(laplacian_thresh, cv.COLOR_GRAY2BGR)
+
+    if lines is not None:
+        print(f"Found {len(lines)} line segments.")
+        for line in lines:
+            x1, y1, x2, y2 = line
+            cv.line(output_hough, (x1, y1), (x2, y2), (0, 0, 0), thickness=2)
+        
+    kernel_hough_open = np.ones((2,2),np.uint8)
+    hough_open_img = cv.morphologyEx(output_hough, cv.MORPH_OPEN, kernel_hough_open)
+
+    kernel_dilate = np.ones((25,25), np.uint8)
+    hough_dilate_img = cv.morphologyEx(hough_open_img, cv.MORPH_DILATE, kernel_dilate)
+
+    cv.imshow("test_hough", output_hough)
+    cv.imshow("test_open", hough_open_img)
+    cv.imshow("test_dilate", hough_dilate_img)
+
     '''
 
-    # TODO: REMOVE
-    # Test to remove small blobs
-    '''
-    # contours, hierarchy = cv.findContours(laplacian_thresh, mode = cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
-    # photo_contours = np.copy(photo)
-    # cv.drawContours(photo_contours, contours, -1, (0, 0, 255), 2, cv.FILLED)
-    # cv.imshow("contour_test", photo_contours)
-    '''
-
-    kernel2 = np.ones((15,15),np.uint8)
-    morph_close_img = cv.morphologyEx(laplacian_thresh, cv.MORPH_CLOSE, kernel2)
     
-    contours, hierarchy = cv.findContours(morph_close_img, mode = cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_NONE)
-    photo_contours = np.copy(photo)
-    # Loop through each contour and assign a unique random BGR color
-    for i, cnt in enumerate(contours):
-        color = np.random.randint(0, 256, size=3).tolist()  # Generates (B, G, R)
-        cv.drawContours(photo_contours, contours, i, color, 2)
+    # kernel = np.ones((5,5),np.uint8)
+    # morph_close_img = cv.morphologyEx(laplacian_thresh, cv.MORPH_CLOSE, kernel)
 
-    # cv.drawContours(photo_contours, contours, -1, (0, 0, 255), 2, cv.FILLED)
-    cv.imshow("contour_test", photo_contours)
+    # kernel2 = np.ones((3,3),np.uint8)
+    # morph_open_img = cv.morphologyEx(laplacian_thresh, cv.MORPH_OPEN, kernel2)
+    
+    # contours, hierarchy = cv.findContours(morph_open_img, mode = cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_NONE)
+    # photo_contours = np.copy(photo)
+
+    kernel = np.ones((21,21), np.uint8)
+    test1 = cv.morphologyEx(laplacian_thresh, cv.MORPH_CROSS, kernel)
+
+    # kernel2 = np.ones((7,7),np.uint8)
+    # test2 = cv.morphologyEx(laplacian_thresh, cv.MORPH_CLOSE, kernel2)
+
+
+    # cv.imshow("test1", test1)
+    # cv.imshow("test2", test2)
+    
+    
+
+    # Loop through each contour and assign a unique random BGR color
+    # for i, cnt in enumerate(contours):
+    #     color = np.random.randint(0, 256, size=3).tolist()  # Generates (B, G, R)
+    #     cv.drawContours(photo_contours, contours, i, color, 2)
+
+
+    # max_contour = max(contours, key=cv.contourArea)
+    # x,y,w,h = cv.boundingRect(max_contour)
+    # # draw the biggest contour (max_contour) in green
+    # cv.rectangle(photo_contours,(x,y),(x+w,y+h),(0,255,0),2)
+    
     
     
 
@@ -226,15 +246,10 @@ def circumference(photo: cv.typing.MatLike):
 
 
     if ENABLE_VERBOSE:
-        print("Circunference: {}".format(circumference))
-
-        cv.imshow("circumference", laplacian_thresh)
-        cv.imshow("MORPH_CLOSE", morph_close_img)
+        print("Circumference: {}".format(circumference))
         cv.waitKey(0)
    
     return circumference
-
-
 
 
 print("{} - Program started".format(current_time()))
