@@ -67,7 +67,7 @@ def contour_detection(photo: cv.typing.MatLike):
     imshow_array_small = cv.resize(combined_output, (int(original_width/2), int(original_height/2)))
 
     if ENABLE_VERBOSE:
-        cv.imshow("test1", imshow_array_small)
+        cv.imshow("Contour detection test", imshow_array_small)
         cv.waitKey(0)
 
     return 1
@@ -105,7 +105,7 @@ def edge_detection(photo: cv.typing.MatLike):
     combined_all_small = cv.resize(combined_all, (int(original_width/2), int(original_height/2)))
 
     if ENABLE_VERBOSE:   
-        cv.imshow("test1", combined_all_small)
+        cv.imshow("Edge detection test", combined_all_small)
         cv.waitKey(0)
 
     return 1
@@ -142,7 +142,7 @@ def laplacian_param_test(photo: cv.typing.MatLike):
     combined_all_small = cv.resize(combined_total, (int(original_width/2), int(original_height/2)))
 
     if ENABLE_VERBOSE:
-        cv.imshow("test1", combined_all_small)
+        cv.imshow("Laplacian test", combined_all_small)
         cv.waitKey(0)
         
     return 1
