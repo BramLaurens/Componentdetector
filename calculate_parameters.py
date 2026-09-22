@@ -19,7 +19,7 @@ ENABLE_VERBOSE = False
 
 
 # Variables 
-TESTPHOTO_PATH = "photos/Trainset_150901"               # Path where photos are found
+TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"               # Path where photos are found
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
@@ -27,125 +27,14 @@ test_result_dict = {                    # Stores all the information about the p
 }
 
 
-# A very simple function that returns a string of formatted time.
+# A function that returns a string of formatted time.
 def current_time():
     return datetime.now().strftime("%H:%M:%S.%f")
 
-
-##-- First tests / parameter test (not used in final product)--##
-# Contour detection - Contour detection
-# No Quantified result yet
-def contour_detection(photo: cv.typing.MatLike):
-    # Make a copy of the photo to ensure not editing the original (might make program slower?)
-    test_img = np.copy(photo)
-
-    # Convert the image to grayscale
-    test_img = cv.cvtColor(test_img, cv.COLOR_BGR2GRAY)
-
-    # Set a threshold and create a black-white image
-    ret, test_img_thresh = cv.threshold(test_img, 120, 255, cv.THRESH_BINARY_INV)
-
-    # Find contours
-    contours, hierarchy = cv.findContours(test_img_thresh, mode = cv.RETR_TREE, method = cv.CHAIN_APPROX_NONE)
-
-    # Apply contours
-    output_frame = test_img_thresh.copy()
-    output_frame = cv.cvtColor(test_img_thresh, cv.COLOR_GRAY2BGR) 
-    cv.drawContours(output_frame, contours, -1, (0, 0, 255), 2, cv.FILLED)
-
-    # Convert some GRAY images to BGR for stacking
-    thresh_BGR = cv.cvtColor(test_img_thresh, cv.COLOR_GRAY2BGR)
-    test_img_BGR = cv.cvtColor(test_img, cv.COLOR_GRAY2BGR)
-
-    # Stack images to create a readable interface
-    stack_1 = np.concatenate((photo, test_img_BGR), axis=1)
-    stack_2 = np.concatenate((thresh_BGR, output_frame), axis=1)
-    combined_output = np.concatenate((stack_1, stack_2), axis=0)
-
-    # Scale the result so that it can be viewed in whole
-    original_height, original_width, c = combined_output.shape
-    imshow_array_small = cv.resize(combined_output, (int(original_width/2), int(original_height/2)))
-
-    if ENABLE_VERBOSE:
-        cv.imshow("Contour detection test", imshow_array_small)
-        cv.waitKey(0)
-
-    return 1
-
-# Edge detection - try multiple methods for edge detection
-# No Quantified result yet
-def edge_detection(photo: cv.typing.MatLike):
-    test_img = np.copy(photo)
-
-    # Deze gehele test wordt in GRAY gedaan
-    test_img = cv.cvtColor(test_img, cv.COLOR_BGR2GRAY)
-
-    # Blur with (5,5) kernel
-    test_img_blur = cv.GaussianBlur(test_img, (5,5), 0)
-
-    edges_canny =       cv.Canny(test_img_blur, 50, 150)
-    edges_sobel =       cv.Sobel(test_img_blur, cv.CV_8U, 1, 1, ksize=5)
-    edges_laplacian =   cv.Laplacian(test_img_blur, cv.CV_8U, ksize=5)
-
-    combined_edges = np.concatenate((edges_canny, edges_sobel, edges_laplacian), axis=1)
-
-
-    thresh_value = 254
-    ret, edges_canny_thresh      = cv.threshold(edges_canny, thresh_value, 255, cv.THRESH_BINARY)
-    ret, edges_sobel_thresh      = cv.threshold(edges_sobel, thresh_value, 255, cv.THRESH_BINARY)
-    ret, edges_laplacian_thresh  = cv.threshold(edges_laplacian, thresh_value, 255, cv.THRESH_BINARY)
-
-    combined_edges_thresh = np.concatenate((edges_canny_thresh, edges_sobel_thresh, edges_laplacian_thresh), axis=1)
-
-    combined_all = np.concatenate((combined_edges, combined_edges_thresh), axis=0)
-
-
-    # Scale the result so that it can be viewed in whole
-    original_height, original_width = combined_all.shape
-    combined_all_small = cv.resize(combined_all, (int(original_width/2), int(original_height/2)))
-
-    if ENABLE_VERBOSE:   
-        cv.imshow("Edge detection test", combined_all_small)
-        cv.waitKey(0)
-
-    return 1
-
-# Hough lines
-# No Quantified result yet
-def laplacian_param_test(photo: cv.typing.MatLike):
-    test_img = np.copy(photo)
-    
-    # Deze gehele test wordt in GRAY gedaan
-    test_img = cv.cvtColor(test_img, cv.COLOR_BGR2GRAY)
-
-    # Blur with (5,5) kernel
-    test_img_blur5 = cv.GaussianBlur(test_img, (5,5), 0)
-    test_img_blur7 = cv.GaussianBlur(test_img, (7,7), 0)
-    
-
-    edges_laplacian_blur7 =   cv.Laplacian(test_img_blur7, cv.CV_8U, ksize=5)
-    edges_laplacian_blur5 =   cv.Laplacian(test_img_blur5, cv.CV_8U, ksize=5)
-    edges_laplacian_noblur =   cv.Laplacian(test_img, cv.CV_8U, ksize=5)
-
-    
-    ret, edges_laplacian_blur7_thresh = cv.threshold(edges_laplacian_blur7, 254, 255, cv.THRESH_BINARY)
-    ret, edges_laplacian_blur5_thresh = cv.threshold(edges_laplacian_blur5, 254, 255, cv.THRESH_BINARY)
-    ret, edges_laplacian_noblur_thresh  = cv.threshold(edges_laplacian_noblur, 254, 255, cv.THRESH_BINARY)
-
-
-    combined_laplacian = np.concatenate((edges_laplacian_blur7, edges_laplacian_blur5, edges_laplacian_noblur), axis=1)
-    combined_laplacian_thresh = np.concatenate((edges_laplacian_blur7_thresh, edges_laplacian_blur5_thresh, edges_laplacian_noblur_thresh), axis=1)
-    combined_total = np.concatenate((combined_laplacian, combined_laplacian_thresh), axis=0)
-
-    # Scale the result so that it can be viewed in whole
-    original_height, original_width = combined_total.shape
-    combined_all_small = cv.resize(combined_total, (int(original_width/2), int(original_height/2)))
-
-    if ENABLE_VERBOSE:
-        cv.imshow("Laplacian test", combined_all_small)
-        cv.waitKey(0)
-        
-    return 1
+# A function that returns the component name from the image path
+def get_component_name(file_path: str):
+    file_component_name = os.path.basename(file_path)
+    return file_component_name.split("_")[0]
 
 
 ##-- Parameter functions --##
@@ -252,76 +141,134 @@ def circumference(photo: cv.typing.MatLike):
     return circumference
 
 
-print("{} - Program started".format(current_time()))
 
-# Create the necessary lists in the test_result_dict, every test needs a list.
-# In this list the quantified result of each test is saved
-test_result_dict["contour_detection"] = []
-test_result_dict["edge_detection"] = []
-test_result_dict["laplacian_param_test"] = []
-test_result_dict["circumference"] = []
+def IC_pincount(photo: cv.typing.MatLike):
+    CONTOUR_AREA_THRESH = 30            # This value was found to work best by trial and error, with a value of 50, the upright dip's pins get detected, but the upside down dips don't
+    contour_count = 0
 
+    # Create filter
+    # (Filter values found by trial and error, optimizzed on DIP_8 pins)
+    low_gray = np.array([50, 130, 220])
+    high_gray = np.array([255, 255, 255])
 
+    # Create mask from photo 
+    mask = cv.inRange(photo, low_gray, high_gray)
 
-# Run for every photo in the test
-for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
-    # Read image
-    photo = cv.imread(file_path)
+    # Find contours in photo in order to count them
+    contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
-    # Check if the photo exists at given path. If not, go the the next item.
-    # This check could be removed, but results in an "reportOptionalMemberAccess" pylance flag at "photo.shape", since we cannot prove it is never None.
-    if photo is None:
-        print("No image found at path: {}".format(file_path))
-        continue
-    
-    ##-- Pre processing --##
-    # Crop out the turntable edges
-    h, w, c = photo.shape
-    photo = photo[0:h, 160:w-200]       
+    # Count all "Valid" contours. A "Valid" contour has a minimum area of CONTOUR_AREA_THRESH
+    for i in range(len(contours)):
+        if cv.contourArea(contours[i]) >= CONTOUR_AREA_THRESH:
+            contour_count += 1
 
-    ##-- Parameter testing --##
-    # test_result_dict["contour_detection"].append( contour_detection(photo))
-    # test_result_dict["edge_detection"].append( edge_detection(photo))
-    # test_result_dict["laplacian_param_test"].append( laplacian_param_test(photo))
+    # Optional output
+    if ENABLE_VERBOSE:
+        print("Valid Contours found: ", contour_count)
+        contours_img = np.copy(photo)
+        contours_img = cv.drawContours(contours_img, contours, -1, (0, 0, 255), thickness=2)
 
-    ##-- Parameter functions --##
-    test_result_dict["circumference"].append(circumference(photo))
+        cv.imshow("Original image", photo)
+        cv.imshow("Mask", mask)
+        cv.imshow("Contours", contours_img)
 
+        cv.waitKey(0)
 
-    ##-- Other test data (for plotting) --##
-    # Save the current photo count in the same list position as the test results
-    test_result_dict["photo_number"].append(photo_count)
-
-    # Save the current Object name in the same list position as the test results
-    file_component_name = os.path.basename(file_path)
-    file_component_name = file_component_name.split("_")[0]
-    test_result_dict["photo_component_name"].append(file_component_name)
-
-    photo_count += 1
+    # Return value
+    return contour_count
 
 
-print("{} - Done calculating. Total photos tested: {}".format(current_time(), photo_count))
-if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
 
-print("{} - Starting result visualisation".format(current_time()))
+# Main program
+if __name__ == "__main__":
+
+    ##-- Processing --##
+    # Create the necessary lists in the test_result_dict, every test needs a list.
+    # In this list the quantified result of each test is saved.
+    test_result_dict["circumference"] = []
+    test_result_dict["IC_pincount"] = []
+
+    # Grab filapaths for all photos going to be processed
+    glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
+
+    print("{} - Program started, analyzing {} photos".format(current_time(), len(glob_filelist)))
+
+    # Loop through all photos and run processing.
+    for file_path in glob_filelist:
+        # Read image
+        photo = cv.imread(file_path)
+
+        # Check if the photo exists at given path. If not, go the the next item.
+        # This check could be removed, but results in an "reportOptionalMemberAccess" pylance flag at "photo.shape", since we cannot prove it is never None.
+        if photo is None:
+            print("No image found at path: {}".format(file_path))
+            continue
+        
+        ##-- Pre processing --##
+        # Crop out the turntable edges
+        h, w, c = photo.shape
+        photo = photo[0:h, 160:w-200]
 
 
-##-- Results --##
-##-- Visualisation --#
-# Use a subplot for futureproofing, alowing for more plots in 1 window in the future.
-#   If this is done "axs." needs to be replaced with "axs[x]." with x representing the plot
-fig, axs = plt.subplots(1)
-
-# Create colors for all scatter plots
-# for test_result_dict
-
-# Plot the component name vs circumference
-axs.scatter(test_result_dict["photo_component_name"], test_result_dict["circumference"])
-axs.set_title("Circumference per component")
-axs.set(xlabel="Component", ylabel="Circumference (px)")
-
-# Show the figures
-plt.show()
+        ##-- Parameter functions --##
+        # test_result_dict["circumference"].append(circumference(photo))
+        test_result_dict["IC_pincount"].append(IC_pincount(photo))
 
 
-print("{} - Program Done".format(current_time()))
+        ##-- Other test data (for plotting) --##
+        test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
+        photo_count += 1                                                                    # Update the total photo_count
+        test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
+
+        # Give output to the user on every 500 photos analyzed. This gives the user insight in the programs speed.
+        if photo_count % 500 == 0:
+            print("Current photo count: {}/{}".format(photo_count, len(glob_filelist)))
+
+
+    # Done processing
+    print("{} - Done calculating. Total photos tested: {}".format(current_time(), photo_count))
+
+    if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
+
+    print("{} - Starting result visualisation".format(current_time()))
+
+
+    ##-- Visualisation --##
+    #### ---- IC_pincount ---- ####
+    # START Gemini (AI) helped this bit, this generates our third scatter parameter, frequency of appearing and makes a new dictionary (grouped) that has the new information
+    import pandas as pd
+
+    # 1. Create DataFrame using only the two matching arrays
+    df = pd.DataFrame({
+        "photo_component_name": test_result_dict["photo_component_name"],
+        "IC_pincount": test_result_dict["IC_pincount"]
+    })
+
+    # 2. Count frequencies of unique pairs
+    grouped = df.groupby(["photo_component_name", "IC_pincount"]).size().reset_index(name="count")
+
+    # 3. Scale frequency to marker size
+    grouped["s"] = grouped["count"] * 20  # adjust factor as needed
+    # END Gemini (AI) helped this bit
+
+
+
+    # If this is done "axs." needs to be replaced with "axs[x]." with x representing the plot
+    fig, axs = plt.subplots(1)
+
+    # Plot the component name vs IC_pinout
+    axs.scatter(grouped["photo_component_name"], grouped["IC_pincount"], s=grouped["s"], alpha=0.6)# Use a subplot for futureproofing, alowing for more plots in 1 window in the future.
+
+    # axs.scatter(test_result_dict["photo_component_name"], test_result_dict["IC_pincount"], s=s)
+    axs.set_title("IC_Pinout per component")
+    axs.set(xlabel="Component", ylabel="IC_pincount (n)")
+    axs.tick_params("x", labelrotation=45)
+
+    #### ---- END IC_pincount ---- ####
+
+    # Show the figures
+    plt.show()
+
+
+
+    print("{} - Program Done".format(current_time()))
