@@ -10,7 +10,7 @@ import os
 #surpress ffmpeg log messages
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "loglevel;error"
 
-photos_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photos")
+photos_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photosblue")
 os.makedirs(photos_directory, exist_ok=True)
 
 app = customtkinter.CTk()
@@ -227,14 +227,14 @@ def autocapture_thread():
             time.sleep(100/1000)  # Wait for 100 milliseconds
             capture_frame()
             print("Frame captured")
-            time.sleep(2)  # Capture every 5 seconds
+            time.sleep(125/1000)  # Capture every second
 
 def stop_autocapture():
     global auto_capture_enabled
     auto_capture_enabled = False
     
 combobox = customtkinter.CTkComboBox(
-    app, values=["Resistor", "ElecCapacitor", "MKPCapacitor", "CerCapacitor","Inductor", "Diode", "Transistor", "ArduinoNano"], 
+    app, values=["Resistor", "ElecCapacitor", "MKPCapacitor", "CerCapacitor","Inductor", "LED","Inductor_toroid", "Diode", "MOSFET", "ArduinoNano", "BJT", "DIP16", "DIP8"], 
     command=combobox_callback, 
     variable=current_componenttype)
 
