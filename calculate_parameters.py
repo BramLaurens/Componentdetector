@@ -54,7 +54,7 @@ def circumference(photo: cv.typing.MatLike):
 
     # Apply OpenCV's laplacian formula to the photo. This function applies a laplacian Kernel, which measures (and highlights) a rapid changes in pixel intensity. 
     photo_laplacian = cv.Laplacian(photo_blur, cv.CV_8U, ksize=5)
-
+    
     # Apply a threshold to the laplacian of the photo to get only the 255.
         # The cv.THRESH_BINARY, makes sure it is a standard threshold operation (pixel value > thresh? then pixel=white, else pixel=black)
     ret, laplacian_thresh = cv.threshold(photo_laplacian, 254, 255, cv.THRESH_BINARY)
@@ -179,6 +179,23 @@ def IC_pincount(photo: cv.typing.MatLike):
 
 
 
+def count_unique_colors(photo: cv.typing.MatLike):
+    # unique_colors = np.unique(photo)
+
+    photo_copy = np.copy(photo)
+    # Reshape the 3D array to a 2D array merging the first two dimensions
+    Ar = photo_copy.reshape(-1,photo_copy.shape[2])
+
+    # Perform lex sort and get the sorted indices and xy pairs
+    sorted_idx = np.lexsort(Ar.T)
+    sorted_Ar =  Ar[sorted_idx,:]
+
+    # Get the count of rows that have at least one TRUE value 
+    # indicating presence of unique subarray there
+    unq_out = np.any(np.diff(sorted_Ar,axis=0),1).sum()+1
+
+    return(unq_out)
+
 # Main program
 if __name__ == "__main__":
 
@@ -187,6 +204,7 @@ if __name__ == "__main__":
     # In this list the quantified result of each test is saved.
     test_result_dict["circumference"] = []
     test_result_dict["IC_pincount"] = []
+    # test_result_dict["unique_colors"] = [] #TODO REMOVE?
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -213,12 +231,14 @@ if __name__ == "__main__":
         ##-- Parameter functions --##
         # test_result_dict["circumference"].append(circumference(photo))
         test_result_dict["IC_pincount"].append(IC_pincount(photo))
+        # test_result_dict["unique_colors"].append(count_unique_colors(photo)) #TODO REMOVE?
 
 
         ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
         photo_count += 1                                                                    # Update the total photo_count
         test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
+
 
         # Give output to the user on every 500 photos analyzed. This gives the user insight in the programs speed.
         if photo_count % 500 == 0:
@@ -254,17 +274,20 @@ if __name__ == "__main__":
 
 
     # If this is done "axs." needs to be replaced with "axs[x]." with x representing the plot
-    fig, axs = plt.subplots(1)
+    fig, axs = plt.subplots(2)
 
     # Plot the component name vs IC_pinout
-    axs.scatter(grouped["photo_component_name"], grouped["IC_pincount"], s=grouped["s"], alpha=0.6)# Use a subplot for futureproofing, alowing for more plots in 1 window in the future.
+    axs[0].scatter(grouped["photo_component_name"], grouped["IC_pincount"], s=grouped["s"], alpha=0.6)# Use a subplot for futureproofing, alowing for more plots in 1 window in the future.
 
     # axs.scatter(test_result_dict["photo_component_name"], test_result_dict["IC_pincount"], s=s)
-    axs.set_title("IC_Pinout per component")
-    axs.set(xlabel="Component", ylabel="IC_pincount (n)")
-    axs.tick_params("x", labelrotation=45)
+    axs[0].set_title("IC_Pinout per component")
+    axs[0].set(xlabel="Component", ylabel="IC_pincount (n)")
+    axs[0].tick_params("x", labelrotation=45)
 
     #### ---- END IC_pincount ---- ####
+
+
+    axs[1].scatter(test_result_dict["photo_component_name"], test_result_dict["unique_colors"])
 
     # Show the figures
     plt.show()
