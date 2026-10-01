@@ -88,14 +88,33 @@ def laplacian_param_test(photo: cv.typing.MatLike):
 
 
 def colorspace_test(photo: cv.typing.MatLike):
+    # HSV
     photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV)
+    h, s, v = cv.split(photo_HSV)
+    combined_hsv = np.concatenate((h, s, v), axis=1)
+    c_hsv_height, c_hsv_width = combined_hsv.shape
+    combined_hsv_small = cv.resize(combined_hsv, (int(c_hsv_width/2), int(c_hsv_height/2)))
+    cv.imshow("HSV - split", combined_hsv_small)
     cv.imshow("HSV", photo_HSV)
 
+    # HLS
     photo_HLS = cv.cvtColor(photo, cv.COLOR_BGR2HLS)
-    cv.imshow("H:S", photo_HLS)
+    h, l, s = cv.split(photo_HSV)
+    combined_hls = np.concatenate((h, l, s), axis=1)
+    c_hls_height, c_hls_width = combined_hsv.shape
+    combined_hls_small = cv.resize(combined_hls, (int(c_hls_width/2), int(c_hls_height/2)))
+    cv.imshow("HLS - split", combined_hls_small)
+    cv.imshow("HLS", photo_HLS) 
 
+    # LAB
     photo_LAB = cv.cvtColor(photo, cv.COLOR_BGR2LAB)
+    l, a, b = cv.split(photo_LAB)
+    combined_lab = np.concatenate((l, a, b), axis=1)
+    c_lab_height, c_lab_width = combined_lab.shape
+    combined_lab_small = cv.resize(combined_lab, (int(c_lab_width/2), int(c_lab_height/2)))
+    cv.imshow("LAB - split", combined_lab_small)
     cv.imshow("LAB", photo_LAB)
+
 
     cv.waitKey(0)
 
@@ -323,14 +342,14 @@ def count_unique_colors(photo: cv.typing.MatLike):
 def nothing(a):
     return None
 
-cv.namedWindow("TestWindow", )
-cv.createTrackbar("B_low", "TestWindow", 100, 255, nothing)
-cv.createTrackbar("G_low", "TestWindow", 120, 255, nothing)
-cv.createTrackbar("R_low", "TestWindow", 180, 255, nothing)
-cv.createTrackbar("B_high", "TestWindow", 140, 255, nothing)
-cv.createTrackbar("G_high", "TestWindow", 255, 255, nothing)
-cv.createTrackbar("R_high", "TestWindow", 255, 255, nothing)
-cv.createTrackbar("Contrast", "TestWindow", 1000, 2000, nothing)
+# cv.namedWindow("TestWindow")
+# cv.createTrackbar("B_low", "TestWindow", 100, 255, nothing)
+# cv.createTrackbar("G_low", "TestWindow", 120, 255, nothing)
+# cv.createTrackbar("R_low", "TestWindow", 180, 255, nothing)
+# cv.createTrackbar("B_high", "TestWindow", 140, 255, nothing)
+# cv.createTrackbar("G_high", "TestWindow", 255, 255, nothing)
+# cv.createTrackbar("R_high", "TestWindow", 255, 255, nothing)
+# cv.createTrackbar("Contrast", "TestWindow", 1000, 2000, nothing)
 
 # B_low, G_low, R_low, Contrast = 100, 120, 180, 1
 # B_high, G_high, R_high = 140, 255, 255
@@ -410,20 +429,84 @@ def IC_pincount(photo: cv.typing.MatLike):
 
     # Return value
     return contour_count
+
     
+def circumference(photo: cv.typing.MatLike):
+    # This function doesn't utelize color seen in the image
+    photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
 
-def histogram(photo: cv.typing.MatLike):
-    photy_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
+    # Blur the photo with a kerkel size of 5x5.
+        # The "0" defines sigmaX to 0, which means the standard deviation in the X direction is 0.
+        # This results in an even blur
+    photo_blur = cv.GaussianBlur(photo_gray, (3,3), 0)
+
+    # Apply OpenCV's laplacian formula to the photo. This function applies a laplacian Kernel, which measures (and highlights) a rapid changes in pixel intensity. 
+    photo_laplacian = cv.Laplacian(photo_blur, cv.CV_8U, ksize=5)
+    
+    # Apply a threshold to the laplacian of the photo to get only the 255.
+        # The cv.THRESH_BINARY, makes sure it is a standard threshold operation (pixel value > thresh? then pixel=white, else pixel=black)
+    ret, laplacian_thresh = cv.threshold(photo_laplacian, 254, 255, cv.THRESH_BINARY)
+
+    # Calculate the circumference by counting all the non zero pixels in the image.
+    #   This works since the above threshold function creates a strict black(255) white(0) picture.
+    circumference = cv.countNonZero(laplacian_thresh)
 
 
+    if ENABLE_VERBOSE:
+        cv.imshow("laplacian", laplacian_thresh)
+        print("Circumference: {}".format(circumference))
+        cv.waitKey(0)
+   
+    return circumference
 
-    # if ENABLE_VERBOSE:
 
+# This function creates a snippit out of the original photo which only includes the component
+# Known limitation: Function currently only works for photos with a single component. If multiple components are visible, it will crop around both components.
+def crop_to_component(photo: cv.typing.MatLike):
+    PADDING = 20        # Padding is applied around the object to ensure the entire object is captured.
+
+    # Convert photo to HSV and apply a blur prevent white spots in threshold
+    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV)
+    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
+
+    # Split the H S V values and apply a threshold to the s channel. This threshold value (110), was found by trial and error
+    h, s, v = cv.split(photo_HSV_blur)
+    ret, s_thresh = cv.threshold(s, 110, 255, cv.THRESH_BINARY)
+
+    # Calculate the bounding rectangle (smallest rectangle that contains all white pixels)
+    x, y, w, h = cv.boundingRect(s_thresh)
+
+    # Add padding to bounding rectangle
+    y_start_padding = max(0, y - PADDING)
+    y_end_padding = min(photo.shape[0], y + h + PADDING)
+    x_start_padding = max(0, x - PADDING)
+    x_end_padding = min(photo.shape[1], x + w + PADDING)
+
+    # Crop the original photo with the calculated bounding rectangle and padding
+    photo_cropped = photo[y_start_padding:y_end_padding, x_start_padding:x_end_padding]
+
+    if ENABLE_VERBOSE:
+        # Draw bounding rectangle with padding
+        photo_HSV_rect = np.copy(photo)
+        cv.rectangle(photo_HSV_rect, (x_start_padding, y_start_padding), (x_end_padding, y_end_padding), (0, 255, 0))
+
+        cv.imshow("HSV - S with threshold", s_thresh)
+        cv.imshow("Bounding rectangle", photo_HSV_rect)
+        cv.imshow("Cropped result", photo_cropped)
+
+        cv.waitKey(0)
+
+    # Return the cropped photo
+    return photo_cropped
+
+    
+   
 
 
 for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # Read image
     photo = cv.imread(file_path)
+
 
     # Check if the photo exists at given path. If not, go the the next item.
     # This check could be removed, but results in an "reportOptionalMemberAccess" pylance flag at "photo.shape", since we cannot prove it is never None.
@@ -435,6 +518,8 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # Crop out the turntable edges
     h, w, c = photo.shape
     photo = photo[0:h, 160:w-200]   
+
+    photo_cropped = crop_to_component(photo)
 
 
     file_component_name = os.path.basename(file_path)
@@ -448,8 +533,11 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # histogram_test(photo)
 
 
-    find_pins_test(photo)
+    # find_pins_test(photo)
     # IC_pincount(photo)
     # histogram_test(photo)
 
     # count_unique_colors(photo)
+    # circumference(photo)
+    # circumference2(photo)
+
