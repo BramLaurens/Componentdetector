@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt     # Matplotlib provides function to visualize 
 import math
 import colorsys
 
-TESTPHOTO_PATH = "photos/blauw_test"               # Path where photos are found
-# TESTPHOTO_PATH = "train_photos/DATASET_BLUE_21091417"
+# TESTPHOTO_PATH = "photos/blauw_test"               # Path where photos are found
+TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"
 
 ENABLE_VERBOSE = True
 
@@ -283,37 +283,58 @@ def LAB_corner_filter_test (photo: cv.typing.MatLike):
 # https://docs.opencv.org/5.0/py_tutorials/py_imgproc/py_histograms/py_histogram_begins/py_histogram_begins.html#find-histogram
 def histogram_test(photo: cv.typing.MatLike):
     photo_copy = np.copy(photo)
-    photo_gray = cv.cvtColor(photo_copy, cv.COLOR_BGR2GRAY)
+    # photo_gray = cv.cvtColor(photo_copy, cv.COLOR_BGR2GRAY)
 
-    histogram = cv.calcHist([photo_gray], [0], None, [256], [0, 256])
+    # histogram = cv.calcHist([photo_copy], [0], None, [256], [0, 256])
+    # histogram = cv.calcHist([photo_copy], [0], None, [256], [0, 256])
 
-    plt.plot(histogram)
-    cv.imshow("Histogram_img", photo_gray)
+    # plt.plot(histogram, color="blue")
+    # cv.imshow("Histogram_img", photo_copy)
+    # plt.draw()
+    # plt.waitforbuttonpress()
+    # plt.close()
+    colors = ('b','g','r')
+    for i,color in enumerate(colors):
+        hist = cv.calcHist([photo_copy],[i],None,[256],[0,256])
+        plt.plot(hist,color = color)
+    plt.title('Image Histogram GFG')
     plt.draw()
     plt.waitforbuttonpress()
-    # plt.close()
 
 
+def count_unique_colors(photo: cv.typing.MatLike):
+    # unique_colors = np.unique(photo)
 
+    photo_copy = np.copy(photo)
+    # Reshape the 3D array to a 2D array merging the first two dimensions
+    Ar = photo_copy.reshape(-1,photo_copy.shape[2])
 
+    # Perform lex sort and get the sorted indices and xy pairs
+    sorted_idx = np.lexsort(Ar.T)
+    sorted_Ar =  Ar[sorted_idx,:]
+
+    # Get the count of rows that have at least one TRUE value 
+    # indicating presence of unique subarray there
+    unq_out = np.any(np.diff(sorted_Ar,axis=0),1).sum()+1
+
+    print(unq_out)
 
 # === This is needed for find_pins_test() === ###
 def nothing(a):
     return None
 
-# cv.namedWindow("TestWindow", )
-# cv.createTrackbar("B_low", "TestWindow", 100, 255, nothing)
-# cv.createTrackbar("G_low", "TestWindow", 120, 255, nothing)
-# cv.createTrackbar("R_low", "TestWindow", 180, 255, nothing)
-# cv.createTrackbar("B_high", "TestWindow", 140, 255, nothing)
-# cv.createTrackbar("G_high", "TestWindow", 255, 255, nothing)
-# cv.createTrackbar("R_high", "TestWindow", 255, 255, nothing)
-# cv.createTrackbar("Contrast", "TestWindow", 1000, 2000, nothing)
+cv.namedWindow("TestWindow", )
+cv.createTrackbar("B_low", "TestWindow", 100, 255, nothing)
+cv.createTrackbar("G_low", "TestWindow", 120, 255, nothing)
+cv.createTrackbar("R_low", "TestWindow", 180, 255, nothing)
+cv.createTrackbar("B_high", "TestWindow", 140, 255, nothing)
+cv.createTrackbar("G_high", "TestWindow", 255, 255, nothing)
+cv.createTrackbar("R_high", "TestWindow", 255, 255, nothing)
+cv.createTrackbar("Contrast", "TestWindow", 1000, 2000, nothing)
 
 # B_low, G_low, R_low, Contrast = 100, 120, 180, 1
 # B_high, G_high, R_high = 140, 255, 255
 def find_pins_test(photo: cv.typing.MatLike):
-
     while(1):
         scope_photo = np.copy(photo)
 
@@ -324,10 +345,8 @@ def find_pins_test(photo: cv.typing.MatLike):
         G_high = cv.getTrackbarPos("G_high", "TestWindow")
         R_high = cv.getTrackbarPos("R_high", "TestWindow")
         Contrast = cv.getTrackbarPos("Contrast", "TestWindow")
-
         
         scope_photo = cv.convertScaleAbs(scope_photo, alpha=(Contrast/1000), beta=0)                    # Increase contrast by 1.8
-
         # low_gray = np.array([0, 0, 200])
         # high_gray = np.array([255, 255, 255])
 
@@ -350,6 +369,10 @@ def find_pins_test(photo: cv.typing.MatLike):
         # cv.imshow("Mask", mask_closed)
         # cv.imshow("Photo mask", ret)
         k = cv.waitKey(1) & 0xFF
+
+
+        print(IC_pincount(ret))
+
         if k == 27:
             break
     
@@ -383,13 +406,21 @@ def IC_pincount(photo: cv.typing.MatLike):
         cv.imshow("Mask", mask)
         cv.imshow("Contours", contours_img)
 
-        cv.waitKey(0)
+        # cv.waitKey(0)
 
     # Return value
     return contour_count
     
 
-# Quick lines of code to loop through all photos in "\photos"
+def histogram(photo: cv.typing.MatLike):
+    photy_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
+
+
+
+    # if ENABLE_VERBOSE:
+
+
+
 for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # Read image
     photo = cv.imread(file_path)
@@ -419,3 +450,6 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
 
     find_pins_test(photo)
     # IC_pincount(photo)
+    # histogram_test(photo)
+
+    # count_unique_colors(photo)
