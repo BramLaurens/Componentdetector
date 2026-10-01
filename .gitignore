@@ -3,3 +3,4 @@
 
 # Don't exclude test_photos
 !/photos/test_photos
+/photosblue
