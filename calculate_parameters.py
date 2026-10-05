@@ -14,8 +14,11 @@ import os                           # This library provides a simple way to get 
 import cv2 as cv                    # OpenCV provides vision algorithms and functions
 import numpy as np                  # Numpy provides multiple handy functions to be used on (multiple dimension) arrays
 import matplotlib.pyplot as plt     # Matplotlib provides function to visualize the gathered information
+import pandas as pd                 # Pandas is used to store the collected paramterdata in an csv file, so it visualisation can happen without all calculations.
+
 
 ENABLE_VERBOSE = False
+CSV_NAME = "calculated_data.csv"
 
 
 # Variables 
@@ -204,7 +207,7 @@ if __name__ == "__main__":
     # In this list the quantified result of each test is saved.
     test_result_dict["circumference"] = []
     test_result_dict["IC_pincount"] = []
-    # test_result_dict["unique_colors"] = [] #TODO REMOVE?
+    test_result_dict["unique_colors"] = [] #TODO REMOVE?
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -231,7 +234,8 @@ if __name__ == "__main__":
         ##-- Parameter functions --##
         # test_result_dict["circumference"].append(circumference(photo))
         test_result_dict["IC_pincount"].append(IC_pincount(photo))
-        # test_result_dict["unique_colors"].append(count_unique_colors(photo)) #TODO REMOVE?
+        # test_result_dict["circumference"].append(circumference(photo))
+        test_result_dict["unique_colors"].append(count_unique_colors(photo)) #TODO REMOVE?
 
 
         ##-- Other test data (for plotting) --##
@@ -241,7 +245,7 @@ if __name__ == "__main__":
 
 
         # Give output to the user on every 500 photos analyzed. This gives the user insight in the programs speed.
-        if photo_count % 500 == 0:
+        if photo_count % 100 == 0:
             print("Current photo count: {}/{}".format(photo_count, len(glob_filelist)))
 
 
@@ -253,45 +257,12 @@ if __name__ == "__main__":
     print("{} - Starting result visualisation".format(current_time()))
 
 
-    ##-- Visualisation --##
-    #### ---- IC_pincount ---- ####
-    # START Gemini (AI) helped this bit, this generates our third scatter parameter, frequency of appearing and makes a new dictionary (grouped) that has the new information
-    import pandas as pd
+    calculated_data = pd.DataFrame(data = {"photo_num": test_result_dict["photo_number"],
+                                          "component_name": test_result_dict["photo_component_name"],
+                                        #   "circumference": test_result_dict["circumference"],
+                                          "IC_pincount": test_result_dict["IC_pincount"],
+                                          "unique_colors": test_result_dict["unique_colors"]
+                                         }
+                                  )
 
-    # 1. Create DataFrame using only the two matching arrays
-    df = pd.DataFrame({
-        "photo_component_name": test_result_dict["photo_component_name"],
-        "IC_pincount": test_result_dict["IC_pincount"]
-    })
-
-    # 2. Count frequencies of unique pairs
-    grouped = df.groupby(["photo_component_name", "IC_pincount"]).size().reset_index(name="count")
-
-    # 3. Scale frequency to marker size
-    grouped["s"] = grouped["count"] * 20  # adjust factor as needed
-    # END Gemini (AI) helped this bit
-
-
-
-    # If this is done "axs." needs to be replaced with "axs[x]." with x representing the plot
-    fig, axs = plt.subplots(2)
-
-    # Plot the component name vs IC_pinout
-    axs[0].scatter(grouped["photo_component_name"], grouped["IC_pincount"], s=grouped["s"], alpha=0.6)# Use a subplot for futureproofing, alowing for more plots in 1 window in the future.
-
-    # axs.scatter(test_result_dict["photo_component_name"], test_result_dict["IC_pincount"], s=s)
-    axs[0].set_title("IC_Pinout per component")
-    axs[0].set(xlabel="Component", ylabel="IC_pincount (n)")
-    axs[0].tick_params("x", labelrotation=45)
-
-    #### ---- END IC_pincount ---- ####
-
-
-    axs[1].scatter(test_result_dict["photo_component_name"], test_result_dict["unique_colors"])
-
-    # Show the figures
-    plt.show()
-
-
-
-    print("{} - Program Done".format(current_time()))
+    calculated_data.to_csv(CSV_NAME, index=True, index_label="pd_index")
