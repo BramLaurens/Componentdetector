@@ -344,17 +344,32 @@ def count_unique_colors(photo: cv.typing.MatLike):
 def nothing(a):
     return None
 
-# cv.namedWindow("TestWindow")
-# cv.createTrackbar("B_low", "TestWindow", 100, 255, nothing)
-# cv.createTrackbar("G_low", "TestWindow", 120, 255, nothing)
-# cv.createTrackbar("R_low", "TestWindow", 180, 255, nothing)
-# cv.createTrackbar("B_high", "TestWindow", 140, 255, nothing)
-# cv.createTrackbar("G_high", "TestWindow", 255, 255, nothing)
-# cv.createTrackbar("R_high", "TestWindow", 255, 255, nothing)
-# cv.createTrackbar("Contrast", "TestWindow", 1000, 2000, nothing)
 
-# B_low, G_low, R_low, Contrast = 100, 120, 180, 1
-# B_high, G_high, R_high = 140, 255, 255
+
+
+# These values are in B G R:        blue, green, red
+# the first array item (number) represents the CONTOUR_AREA_THRESH, this is the minimum area of a contour to be counted as pin
+# The second array item (tuple), represents the low color filter value (BGR)
+# The third array item (tuple), represents the high color filter value (BGR)
+
+pincount_filter_parameters = {
+    # "DIP8" :    [50, (0, 0, 200), (255, 255, 255)],
+    "DIP8" :    [50, (50, 130, 220), (255, 255, 255)],
+    "BJT" :     [100, (0, 101, 188), (255, 255, 255)]
+
+}
+
+cv.namedWindow("TestWindow")
+cv.createTrackbar("B_low", "TestWindow", 0, 255, nothing)
+cv.createTrackbar("G_low", "TestWindow", 0, 255, nothing)
+cv.createTrackbar("R_low", "TestWindow", 200, 255, nothing)
+cv.createTrackbar("B_high", "TestWindow", 255, 255, nothing)
+cv.createTrackbar("G_high", "TestWindow", 255, 255, nothing)
+cv.createTrackbar("R_high", "TestWindow", 255, 255, nothing)
+cv.createTrackbar("Contrast", "TestWindow", 1000, 2000, nothing)
+
+B_low, G_low, R_low, Contrast = 100, 120, 180, 1
+B_high, G_high, R_high = 140, 255, 255
 def find_pins_test(photo: cv.typing.MatLike):
     while(1):
         scope_photo = np.copy(photo)
@@ -375,39 +390,47 @@ def find_pins_test(photo: cv.typing.MatLike):
         high_gray = np.array([B_high, G_high, R_high])
         
 
+
         mask = cv.inRange(scope_photo, low_gray, high_gray)
+        mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3)))
 
-
-        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
-        mask_closed = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel, iterations=2)
-
+        
         photo_mask = np.copy(scope_photo)
-        ret = cv.bitwise_and(photo_mask, photo_mask, mask=mask_closed)
+        ret = cv.bitwise_and(photo_mask, photo_mask, mask=mask)
+        
+        contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
+        contours_img = cv.drawContours(scope_photo, contours, -1, (0, 255, 0), thickness=1)
 
-        cv.imshow("TestWindow", ret)
+        mask_BGR = cv.cvtColor(mask, cv.COLOR_GRAY2BGR)
+        output = np.concatenate((ret, mask_BGR), axis=1)
+        cv.imshow("TestWindow", output)
+        cv.imshow("Contours", contours_img)
+        
+
         # cv.imshow("Original image", scope_photo)
         # cv.imshow("Mask", mask_closed)
         # cv.imshow("Photo mask", ret)
         k = cv.waitKey(1) & 0xFF
 
 
-        print(IC_pincount(ret))
+        print(IC_pincount(photo, filter_parameters=pincount_filter_parameters["DIP8"]))
 
         if k == 27:
             break
-    
 
-def IC_pincount(photo: cv.typing.MatLike):
-    CONTOUR_AREA_THRESH = 50
+
+def IC_pincount(photo: cv.typing.MatLike, filter_parameters):
+    CONTOUR_AREA_THRESH = filter_parameters[0]
     contour_count = 0
 
     # Create filter
-    low_gray = np.array([0, 0, 200])
-    high_gray = np.array([255, 255, 255])
+    low_filter = np.array(filter_parameters[1])
+    high_filter = np.array(filter_parameters[2])
 
     # Create mask from photo 
-    mask = cv.inRange(photo, low_gray, high_gray)
+    mask = cv.inRange(photo, low_filter, high_filter)
+    # mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3)))
 
     # Find contours in photo in order to count them
     contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
@@ -536,7 +559,7 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     photo = photo[0:h, 160:w-200]   
 
     photo_cropped = crop_to_component(photo)
-    body_mask(photo_cropped)
+    # body_mask(photo_cropped)
 
 
     file_component_name = os.path.basename(file_path)
@@ -550,11 +573,10 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # histogram_test(photo)
 
 
-    # find_pins_test(photo)
+    find_pins_test(photo)
     # IC_pincount(photo)
     # histogram_test(photo)
 
     # count_unique_colors(photo)
     # circumference(photo)
     # circumference2(photo)
-

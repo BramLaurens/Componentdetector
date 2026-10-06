@@ -146,20 +146,34 @@ def circumference(photo: cv.typing.MatLike):
 
 
 
-def IC_pincount(photo: cv.typing.MatLike):
-    CONTOUR_AREA_THRESH = 30            # This value was found to work best by trial and error, with a value of 50, the upright dip's pins get detected, but the upside down dips don't
+# These values are in B G R:        blue, green, red
+# the first array item (number) represents the CONTOUR_AREA_THRESH, this is the minimum area of a contour to be counted as pin
+# The second array item (tuple), represents the low color filter value (BGR)
+# The third array item (tuple), represents the high color filter value (BGR)
+pincount_filter_parameters = {
+    "DIP8" :    [30, (50, 130, 220), (255, 255, 255)],
+    "BJT" :     [100, (0, 101, 188), (255, 255, 255)]
+}
+
+def pin_count(photo: cv.typing.MatLike, filter_parameters):
+    CONTOUR_AREA_THRESH = filter_parameters[0]            # This value was found to work best by trial and error, with a value of 50, the upright dip's pins get detected, but the upside down dips don't
     contour_count = 0
 
     # Create filter
     # (Filter values found by trial and error, optimizzed on DIP_8 pins)
-    low_gray = np.array([50, 130, 220])
-    high_gray = np.array([255, 255, 255])
+    # low_gray = np.array([50, 130, 220])
+    # high_gray = np.array([255, 255, 255])
+
+    low_filter = np.array(filter_parameters[1])
+    high_filter = np.array(filter_parameters[2])
 
     # Create mask from photo 
-    mask = cv.inRange(photo, low_gray, high_gray)
+    mask = cv.inRange(photo, low_filter, high_filter)
+    # mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3)))
+
 
     # Find contours in photo in order to count them
-    contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
     # Count all "Valid" contours. A "Valid" contour has a minimum area of CONTOUR_AREA_THRESH
     for i in range(len(contours)):
@@ -268,7 +282,8 @@ if __name__ == "__main__":
     # Create the necessary lists in the test_result_dict, every test needs a list.
     # In this list the quantified result of each test is saved.
     test_result_dict["circumference"] = []
-    test_result_dict["IC_pincount"] = []
+    test_result_dict["DIP8_pincount"] = []
+    test_result_dict["BJT_pincount"] = []
     test_result_dict["unique_colors"] = []
 
     # Grab filapaths for all photos going to be processed
@@ -296,9 +311,12 @@ if __name__ == "__main__":
 
         ##-- Parameter functions --##
         # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["IC_pincount"].append(IC_pincount(photo))
+        test_result_dict["DIP8_pincount"].append(pin_count(photo_cropped, filter_parameters=pincount_filter_parameters["DIP8"]))
+        test_result_dict["BJT_pincount"].append(pin_count(photo, filter_parameters=pincount_filter_parameters["BJT"]))
         # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        # 
+        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        test_result_dict["unique_colors"].append(0)
 
 
         ##-- Other test data (for plotting) --##
@@ -323,7 +341,8 @@ if __name__ == "__main__":
     calculated_data = pd.DataFrame(data = {"photo_num": test_result_dict["photo_number"],
                                           "component_name": test_result_dict["photo_component_name"],
                                         #   "circumference": test_result_dict["circumference"],
-                                          "IC_pincount": test_result_dict["IC_pincount"],
+                                          "DIP8_pincount": test_result_dict["DIP8_pincount"],
+                                          "BJT_pincount": test_result_dict["BJT_pincount"],
                                           "unique_colors": test_result_dict["unique_colors"]
                                          }
                                   )

@@ -13,35 +13,54 @@ if __name__ == "__main__":
     calculated_parameters = pd.read_csv(CSV_NAME)
 
     # Grab parameters from file
-    component_name_list = calculated_parameters["component_name"].to_list()
-    IC_pincount_list = calculated_parameters["IC_pincount"].to_list()
-    unique_colors_list = calculated_parameters["unique_colors"].to_list()
+    # component_name_list = calculated_parameters["component_name"].to_list()
+    # DIP8_pincount_list = calculated_parameters["DIP8_pincount"].to_list()
+    # unique_colors_list = calculated_parameters["unique_colors"].to_list()
 
     # Seaborn theme / style
     sns.set_theme(style="ticks", palette="pastel")
 
 
+    ## -- DIP 8 Pinout -- ##
     plt.figure(1)
-    plt.title("IC_Pinout per component")
+    plt.title("DIP8_Pinout per component")
 
     counts = (
-        calculated_parameters.groupby(["component_name", "IC_pincount"])
+        calculated_parameters.groupby(["component_name", "DIP8_pincount"])
         .size()
         .reset_index(name="frequency")
     )
-    IC_pincount_plot = sns.scatterplot(x="component_name", y="IC_pincount", 
+    IC_pincount_plot = sns.scatterplot(x="component_name", y="DIP8_pincount", 
                                        data=counts,
                                        hue="frequency",       
                                        size="frequency",      
                                        sizes=(40, 300),   
-                                       palette="flare",)     
+                                       palette="flare",
+                                       legend=False)     
 
 
 
-    #### ---- END IC_pincount ---- ####
-
+    ## -- BJT Pinout -- ##
     plt.figure(2)
-    plt.title("IC_Pinout per component")
+    plt.title("BJT_Pinout per component")
+
+    counts = (
+        calculated_parameters.groupby(["component_name", "BJT_pincount"])
+        .size()
+        .reset_index(name="frequency")
+    )
+    IC_pincount_plot = sns.scatterplot(x="component_name", y="BJT_pincount", 
+                                        data=counts,
+                                        hue="frequency",       
+                                        size="frequency",      
+                                        sizes=(40, 300),   
+                                        palette="flare",
+                                        legend=False)     
+
+
+    ## -- Unique colors -- ##
+    plt.figure(3)
+    plt.title("Unique colors")
     unique_colors_plot = sns.boxplot(x="component_name", y="unique_colors",
                                     data=calculated_parameters)
     unique_colors_plot.set_xlabel("Component")
