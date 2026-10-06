@@ -10,7 +10,7 @@ import colorsys
 # TESTPHOTO_PATH = "photos/blauw_test"               # Path where photos are found
 TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"
 
-ENABLE_VERBOSE = True
+ENABLE_VERBOSE = False
 
 
 # Edge detection - try multiple methods for edge detection
@@ -182,12 +182,14 @@ def HSV_test(photo: cv.typing.MatLike):
     # cv.imshow("hsv", photo_hsv)
 
 
-    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    # Increase contrast by 1.8
+    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    # Increase contrast by 1.1 to make some connectors more visible
     ret, thresh = cv.threshold(s, 100, 255, cv.THRESH_BINARY)
 
     cv.imshow("Photo", photo)
     cv.imshow("HSV", photo_hsv)
+    cv.imshow("HSV - H", h)
     cv.imshow("HSV - S", s)
+    cv.imshow("HSV - V", v)
     cv.imshow("Mask", thresh)
 
 
@@ -499,9 +501,23 @@ def crop_to_component(photo: cv.typing.MatLike):
     # Return the cropped photo
     return photo_cropped
 
-    
-   
 
+def body_mask(photo: cv.typing.MatLike):
+    # Convert photo to HSV and apply a blur prevent white spots in threshold
+    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV)
+    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
+
+    h, s, v = cv.split(photo_HSV_blur)
+
+    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    # Increase contrast by 1.1 to make some connectors more visible
+    ret, thresh = cv.threshold(s, 100, 255, cv.THRESH_BINARY)
+
+    body_masked = cv.bitwise_and(photo, photo, mask=thresh)
+
+    cv.imshow("mask", body_masked)
+    cv.waitKey(0)
+
+    return body_masked
 
 for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # Read image
@@ -520,6 +536,7 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     photo = photo[0:h, 160:w-200]   
 
     photo_cropped = crop_to_component(photo)
+    body_mask(photo_cropped)
 
 
     file_component_name = os.path.basename(file_path)
