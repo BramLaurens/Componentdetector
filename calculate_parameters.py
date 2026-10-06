@@ -23,6 +23,7 @@ CSV_NAME = "calculated_data.csv"
 
 # Variables 
 TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"               # Path where photos are found
+
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
@@ -183,21 +184,82 @@ def IC_pincount(photo: cv.typing.MatLike):
 
 
 def count_unique_colors(photo: cv.typing.MatLike):
-    # unique_colors = np.unique(photo)
+    # To create a body mask, we use the s channel of the HSV colorspace
+    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV_FULL)
+    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
 
-    photo_copy = np.copy(photo)
-    # Reshape the 3D array to a 2D array merging the first two dimensions
-    Ar = photo_copy.reshape(-1,photo_copy.shape[2])
+    h, s, v = cv.split(photo_HSV_blur)
 
-    # Perform lex sort and get the sorted indices and xy pairs
-    sorted_idx = np.lexsort(Ar.T)
-    sorted_Ar =  Ar[sorted_idx,:]
+    # Increase contrast by 1.1 to make some connectors more visible, and apply a threshold
+    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    
+    ret, thresh = cv.threshold(s, 100, 255, cv.THRESH_BINARY)
 
-    # Get the count of rows that have at least one TRUE value 
-    # indicating presence of unique subarray there
-    unq_out = np.any(np.diff(sorted_Ar,axis=0),1).sum()+1
+    # Apply mask to image using bitwise AND
+    body_masked = cv.bitwise_and(photo, photo, mask=thresh)
 
-    return(unq_out)
+    # Reshape the body_masked image to a 2D array of shape (num_pixels, 3). We basically throw away the positional information and keep the colors only.
+    # The reshape takes new dimensions as parameters, in which -1 lets numpy calculate this itself.
+    colors_array = body_masked.reshape(-1, body_masked.shape[2])
+
+    # Convert the MatLike into uint8 values for h, s, v. This is possible since the photo is flattened to a 2D array in the above line.
+    h = colors_array[:, 0].astype(np.uint32)
+    s = colors_array[:, 1].astype(np.uint32)
+    v = colors_array[:, 2].astype(np.uint32)
+
+    # Use bitwise operators to add h, s and v after eachother.
+    # Since h, s, and v are arrays, color_ids is now a 1D array with colors for all pixels in the image (saved as a single number)'
+    color_ids = ((h << 16) | (s << 8) | v)
+
+    # Use numpy's array.unique() function to find all uniques in the color_ids array. 
+    values, counts = np.unique(color_ids, return_counts=True)
+
+    # Calculate area, minimum must be 1 to avoid devision by 0
+    oppervlakte = max(1, cv.countNonZero(thresh))
+
+
+    return(len(values) / oppervlakte)
+    # return 1
+
+# This function creates a snippit out of the original photo which only includes the component
+# Known limitation: Function currently only works for photos with a single component. If multiple components are visible, it will crop around both components.
+def crop_to_component(photo: cv.typing.MatLike):
+    PADDING = 20        # Padding is applied around the object to ensure the entire object is captured.
+
+    # Convert photo to HSV and apply a blur prevent white spots in threshold
+    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV)
+    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
+
+    # Split the H S V values and apply a threshold to the s channel. This threshold value (110), was found by trial and error
+    h, s, v = cv.split(photo_HSV_blur)
+    ret, s_thresh = cv.threshold(s, 110, 255, cv.THRESH_BINARY)
+
+    # Calculate the bounding rectangle (smallest rectangle that contains all white pixels)
+    x, y, w, h = cv.boundingRect(s_thresh)
+
+    # Add padding to bounding rectangle
+    y_start_padding = max(0, y - PADDING)
+    y_end_padding = min(photo.shape[0], y + h + PADDING)
+    x_start_padding = max(0, x - PADDING)
+    x_end_padding = min(photo.shape[1], x + w + PADDING)
+
+    # Crop the original photo with the calculated bounding rectangle and padding
+    photo_cropped = photo[y_start_padding:y_end_padding, x_start_padding:x_end_padding]
+
+    if ENABLE_VERBOSE:
+        # Draw bounding rectangle with padding
+        photo_HSV_rect = np.copy(photo)
+        cv.rectangle(photo_HSV_rect, (x_start_padding, y_start_padding), (x_end_padding, y_end_padding), (0, 255, 0))
+
+        cv.imshow("HSV - S with threshold", s_thresh)
+        cv.imshow("Bounding rectangle", photo_HSV_rect)
+        cv.imshow("Cropped result", photo_cropped)
+
+        cv.waitKey(0)
+
+    # Return the cropped photo
+    return photo_cropped
+
+
 
 # Main program
 if __name__ == "__main__":
@@ -207,7 +269,7 @@ if __name__ == "__main__":
     # In this list the quantified result of each test is saved.
     test_result_dict["circumference"] = []
     test_result_dict["IC_pincount"] = []
-    test_result_dict["unique_colors"] = [] #TODO REMOVE?
+    test_result_dict["unique_colors"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -217,7 +279,7 @@ if __name__ == "__main__":
     # Loop through all photos and run processing.
     for file_path in glob_filelist:
         # Read image
-        photo = cv.imread(file_path)
+        photo = cv.imread(file_path, cv.IMREAD_COLOR_BGR)
 
         # Check if the photo exists at given path. If not, go the the next item.
         # This check could be removed, but results in an "reportOptionalMemberAccess" pylance flag at "photo.shape", since we cannot prove it is never None.
@@ -229,13 +291,14 @@ if __name__ == "__main__":
         # Crop out the turntable edges
         h, w, c = photo.shape
         photo = photo[0:h, 160:w-200]
+        photo_cropped = crop_to_component(photo)
 
 
         ##-- Parameter functions --##
         # test_result_dict["circumference"].append(circumference(photo))
         test_result_dict["IC_pincount"].append(IC_pincount(photo))
         # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["unique_colors"].append(count_unique_colors(photo)) #TODO REMOVE?
+        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
 
 
         ##-- Other test data (for plotting) --##
@@ -246,7 +309,7 @@ if __name__ == "__main__":
 
         # Give output to the user on every 500 photos analyzed. This gives the user insight in the programs speed.
         if photo_count % 100 == 0:
-            print("Current photo count: {}/{}".format(photo_count, len(glob_filelist)))
+            print("{} Current photo count: {}/{}".format(current_time(), photo_count, len(glob_filelist)))
 
 
     # Done processing
