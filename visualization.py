@@ -17,19 +17,6 @@ if __name__ == "__main__":
     IC_pincount_list = calculated_parameters["IC_pincount"].to_list()
     unique_colors_list = calculated_parameters["unique_colors"].to_list()
 
-    # 1. Create DataFrame using only the two matching arrays
-    df = pd.DataFrame({
-        "photo_component_name": component_name_list,
-        "IC_pincount": IC_pincount_list
-    })
-
-    # 2. Count frequencies of unique pairs
-    grouped = df.groupby(["photo_component_name", "IC_pincount"]).size().reset_index(name="count")
-
-    # 3. Scale frequency to marker size
-    grouped["s"] = grouped["count"] * 20  # adjust factor as needed
-    # END Gemini (AI) helped this bit
-
     # Seaborn theme / style
     sns.set_theme(style="ticks", palette="pastel")
 
