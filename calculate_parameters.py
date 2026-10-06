@@ -202,13 +202,13 @@ def count_unique_colors(photo: cv.typing.MatLike):
     colors_array = body_masked.reshape(-1, body_masked.shape[2])
 
     # Convert the MatLike into uint8 values for h, s, v. This is possible since the photo is flattened to a 2D array in the above line.
-    h = colors_array[:, 0].astype(np.uint32)
-    s = colors_array[:, 1].astype(np.uint32)
-    v = colors_array[:, 2].astype(np.uint32)
+    b = colors_array[:, 0].astype(np.uint32)
+    g = colors_array[:, 1].astype(np.uint32)
+    r = colors_array[:, 2].astype(np.uint32)
 
     # Use bitwise operators to add h, s and v after eachother.
     # Since h, s, and v are arrays, color_ids is now a 1D array with colors for all pixels in the image (saved as a single number)'
-    color_ids = ((h << 16) | (s << 8) | v)
+    color_ids = ((b << 16) | (g << 8) | r)
 
     # Use numpy's array.unique() function to find all uniques in the color_ids array. 
     values, counts = np.unique(color_ids, return_counts=True)
