@@ -353,19 +353,21 @@ def nothing(a):
 # The third array item (tuple), represents the high color filter value (BGR)
 
 pincount_filter_parameters = {
-    # "DIP8" :    [50, (0, 0, 200), (255, 255, 255)],
-    "DIP8" :    [50, (50, 130, 220), (255, 255, 255)],
-    "BJT" :     [100, (0, 101, 188), (255, 255, 255)]
+    "DIP8" :            [30, 3, (50, 130, 220), (255, 255, 255)],
+    "BJT" :             [100, 3, (0, 101, 188), (255, 255, 255)],
+    "CerCapacitor":     [700, 7, (0, 125, 160), (255, 255, 255)],
+    "Diode":            [100, 15, (0, 0, 90), (30, 255, 255)]
 
 }
 
 cv.namedWindow("TestWindow")
 cv.createTrackbar("B_low", "TestWindow", 0, 255, nothing)
-cv.createTrackbar("G_low", "TestWindow", 0, 255, nothing)
-cv.createTrackbar("R_low", "TestWindow", 200, 255, nothing)
+cv.createTrackbar("G_low", "TestWindow", 129, 255, nothing)
+cv.createTrackbar("R_low", "TestWindow", 160, 255, nothing)
 cv.createTrackbar("B_high", "TestWindow", 255, 255, nothing)
 cv.createTrackbar("G_high", "TestWindow", 255, 255, nothing)
 cv.createTrackbar("R_high", "TestWindow", 255, 255, nothing)
+cv.createTrackbar("KernelSize", "TestWindow", 5, 51, nothing)
 cv.createTrackbar("Contrast", "TestWindow", 1000, 2000, nothing)
 
 B_low, G_low, R_low, Contrast = 100, 120, 180, 1
@@ -380,6 +382,7 @@ def find_pins_test(photo: cv.typing.MatLike):
         B_high = cv.getTrackbarPos("B_high", "TestWindow")
         G_high = cv.getTrackbarPos("G_high", "TestWindow")
         R_high = cv.getTrackbarPos("R_high", "TestWindow")
+        k_size = max(1, cv.getTrackbarPos("KernelSize", "TestWindow"))
         Contrast = cv.getTrackbarPos("Contrast", "TestWindow")
         
         scope_photo = cv.convertScaleAbs(scope_photo, alpha=(Contrast/1000), beta=0)                    # Increase contrast by 1.8
@@ -392,7 +395,7 @@ def find_pins_test(photo: cv.typing.MatLike):
 
 
         mask = cv.inRange(scope_photo, low_gray, high_gray)
-        mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3)))
+        mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (k_size,k_size)))
 
         
         photo_mask = np.copy(scope_photo)
@@ -414,7 +417,7 @@ def find_pins_test(photo: cv.typing.MatLike):
         k = cv.waitKey(1) & 0xFF
 
 
-        print(IC_pincount(photo, filter_parameters=pincount_filter_parameters["DIP8"]))
+        print(IC_pincount(photo, filter_parameters=pincount_filter_parameters["Diode"]))
 
         if k == 27:
             break
@@ -425,12 +428,13 @@ def IC_pincount(photo: cv.typing.MatLike, filter_parameters):
     contour_count = 0
 
     # Create filter
-    low_filter = np.array(filter_parameters[1])
-    high_filter = np.array(filter_parameters[2])
+    low_filter = np.array(filter_parameters[2])
+    high_filter = np.array(filter_parameters[3])
 
     # Create mask from photo 
     mask = cv.inRange(photo, low_filter, high_filter)
-    # mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3)))
+    if filter_parameters[1] > 0:
+        mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (filter_parameters[1],filter_parameters[1])))
 
     # Find contours in photo in order to count them
     contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
@@ -564,6 +568,8 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
 
     file_component_name = os.path.basename(file_path)
     file_component_name = file_component_name.split("_")[0]
+
+    print(file_component_name)
 
     # HSV_laplacian_edge_detection_test(photo)
     # colorspace_test(photo)

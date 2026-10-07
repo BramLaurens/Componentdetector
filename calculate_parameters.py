@@ -148,11 +148,14 @@ def circumference(photo: cv.typing.MatLike):
 
 # These values are in B G R:        blue, green, red
 # the first array item (number) represents the CONTOUR_AREA_THRESH, this is the minimum area of a contour to be counted as pin
+# the second array item (number) represents the morph dilate kernel size
 # The second array item (tuple), represents the low color filter value (BGR)
 # The third array item (tuple), represents the high color filter value (BGR)
 pincount_filter_parameters = {
-    "DIP8" :    [30, (50, 130, 220), (255, 255, 255)],
-    "BJT" :     [100, (0, 101, 188), (255, 255, 255)]
+    "DIP8" :            [30, 0, (50, 130, 220), (255, 255, 255)],
+    "BJT" :             [100, 3, (0, 101, 188), (255, 255, 255)],
+    "CerCapacitor":     [750, 15, (0, 125, 160), (255, 255, 255)],
+    "Diode":            [800, 15, (0, 0, 90), (30, 255, 255)]
 }
 
 def pin_count(photo: cv.typing.MatLike, filter_parameters):
@@ -164,12 +167,13 @@ def pin_count(photo: cv.typing.MatLike, filter_parameters):
     # low_gray = np.array([50, 130, 220])
     # high_gray = np.array([255, 255, 255])
 
-    low_filter = np.array(filter_parameters[1])
-    high_filter = np.array(filter_parameters[2])
+    low_filter = np.array(filter_parameters[2])
+    high_filter = np.array(filter_parameters[3])
 
     # Create mask from photo 
     mask = cv.inRange(photo, low_filter, high_filter)
-    # mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (3,3)))
+    if filter_parameters[1] > 0:
+        mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE, (filter_parameters[1],filter_parameters[1])))
 
 
     # Find contours in photo in order to count them
@@ -277,19 +281,23 @@ def crop_to_component(photo: cv.typing.MatLike):
 
 # Main program
 if __name__ == "__main__":
-
-    ##-- Processing --##
     # Create the necessary lists in the test_result_dict, every test needs a list.
     # In this list the quantified result of each test is saved.
     test_result_dict["circumference"] = []
-    test_result_dict["DIP8_pincount"] = []
-    test_result_dict["BJT_pincount"] = []
-    test_result_dict["unique_colors"] = []
+    test_result_dict["unique_colors"] = []      
 
+        # Pincount functions
+    # test_result_dict["DIP8_pincount"] = []
+    # test_result_dict["BJT_pincount"] = []
+    # test_result_dict["CerCapacitor_pincount"] = []
+    # test_result_dict["Diode_pincount"] = []
+    
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
 
     print("{} - Program started, analyzing {} photos".format(current_time(), len(glob_filelist)))
+    start_time = datetime.now() 
+
 
     # Loop through all photos and run processing.
     for file_path in glob_filelist:
@@ -313,10 +321,10 @@ if __name__ == "__main__":
         # test_result_dict["circumference"].append(circumference(photo))
         test_result_dict["DIP8_pincount"].append(pin_count(photo_cropped, filter_parameters=pincount_filter_parameters["DIP8"]))
         test_result_dict["BJT_pincount"].append(pin_count(photo, filter_parameters=pincount_filter_parameters["BJT"]))
-        # test_result_dict["circumference"].append(circumference(photo))
-        # 
-        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
-        test_result_dict["unique_colors"].append(0)
+        test_result_dict["CerCapacitor_pincount"].append(pin_count(photo, filter_parameters=pincount_filter_parameters["CerCapacitor"]))
+        test_result_dict["Diode_pincount"].append(pin_count(photo, filter_parameters=pincount_filter_parameters["Diode"]))
+
+        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
 
 
         ##-- Other test data (for plotting) --##
@@ -325,26 +333,28 @@ if __name__ == "__main__":
         test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
 
 
-        # Give output to the user on every 500 photos analyzed. This gives the user insight in the programs speed.
+        # Give output to the user on every 100 photos analyzed. This gives the user insight in the programs speed.
         if photo_count % 100 == 0:
             print("{} Current photo count: {}/{}".format(current_time(), photo_count, len(glob_filelist)))
 
 
+
     # Done processing
-    print("{} - Done calculating. Total photos tested: {}".format(current_time(), photo_count))
-
-    if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
-
-    print("{} - Starting result visualisation".format(current_time()))
-
+    print("{} - Done processing. Total photos tested: {}".format(current_time(), photo_count))
+    print("{} - Average time per photo: {} seconds".format(current_time(), (datetime.now() - start_time).total_seconds() / photo_count))
+    print("{} - Saving results to csv file: {}".format(current_time(), CSV_NAME))
 
     calculated_data = pd.DataFrame(data = {"photo_num": test_result_dict["photo_number"],
                                           "component_name": test_result_dict["photo_component_name"],
                                         #   "circumference": test_result_dict["circumference"],
                                           "DIP8_pincount": test_result_dict["DIP8_pincount"],
                                           "BJT_pincount": test_result_dict["BJT_pincount"],
+                                          "CerCapacitor_pincount": test_result_dict["CerCapacitor_pincount"],
+                                          "Diode_pincount": test_result_dict["Diode_pincount"],
                                           "unique_colors": test_result_dict["unique_colors"]
                                          }
                                   )
 
     calculated_data.to_csv(CSV_NAME, index=True, index_label="pd_index")
+
+    if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
