@@ -260,6 +260,17 @@ def crop_to_component(photo: cv.typing.MatLike):
     return photo_cropped
 
 
+def body_mask_color(img_bgr, debug=False):
+    blur = cv.GaussianBlur(img_bgr, (15, 15), 0)
+    img_hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
+
+    lower1, upper1 = np.array([0, 120, 60]), np.array([14, 255, 255])
+    lower2, upper2 = np.array([165, 120, 60]), np.array([180, 255, 255])
+    bodymask = cv.inRange(img_hsv, lower1, upper1) | cv.inRange(img_hsv, lower2, upper2)
+
+    return bodymask
+
+
 
 # Main program
 if __name__ == "__main__":
@@ -293,23 +304,11 @@ if __name__ == "__main__":
         photo = photo[0:h, 160:w-200]
         photo_cropped = crop_to_component(photo)
 
+        bodymask = body_mask(photo_cropped)
 
-        ##-- Parameter functions --##
-        # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["IC_pincount"].append(IC_pincount(photo))
-        # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
-
-
-        ##-- Other test data (for plotting) --##
-        test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
-        photo_count += 1                                                                    # Update the total photo_count
-        test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
-
-
-        # Give output to the user on every 500 photos analyzed. This gives the user insight in the programs speed.
-        if photo_count % 100 == 0:
-            print("{} Current photo count: {}/{}".format(current_time(), photo_count, len(glob_filelist)))
+        cv.imshow("Cropped photo", photo_cropped)
+        cv.imshow("Body mask", bodymask)
+        cv.waitKey(0)
 
 
     # Done processing
