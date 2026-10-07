@@ -1,3 +1,7 @@
-./vscode
-/photos/train_photos
-/photos/validation_photos
+/.vscode
+/photos
+calculated_data.csv
+
+# Don't exclude test_photos
+!/photos/test_photos
+/photosblue
