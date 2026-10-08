@@ -8,7 +8,7 @@ import math
 import colorsys
 
 # TESTPHOTO_PATH = "photos/blauw_test"               # Path where photos are found
-TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"
+TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_singles"
 
 ENABLE_VERBOSE = False
 
@@ -519,6 +519,181 @@ def body_mask(photo: cv.typing.MatLike):
 
     return body_masked
 
+
+# def frequency_domain_test(photo: cv.typing.MatLike):
+#     photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
+
+#     # 1. Grayscale FFT
+#     photo_fft = np.fft.fft2(photo_gray)
+#     photo_fft_shift = np.fft.fftshift(photo_fft)
+
+#     # Calculate magnitude spectrum for grayscale (log scale to make frequencies visible)
+#     magnitude_gray = 20 * np.log(np.abs(photo_fft_shift) + 1)
+#     # Normalize to [0, 255] for OpenCV rendering
+#     magnitude_gray = cv.normalize(magnitude_gray, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
+
+#     ret, magnitude_thresh = cv.threshold(magnitude_gray, 150, 255, cv.THRESH_BINARY)
+
+#     fft_BGR = cv.cvtColor(magnitude_thresh, cv.COLOR_GRAY2BGR)
+
+
+
+#     lines = cv.HoughLinesP(
+#         magnitude_thresh, 
+#         rho=1, 
+#         theta=np.pi / 180, 
+#         threshold=40, 
+#         minLineLength=50, 
+#         maxLineGap=20
+#     )
+
+
+#     if ENABLE_VERBOSE:
+#         if lines is not None:
+#             for line in lines:
+#                 # Flatten array to handle shape variations safely
+#                 line_data = line.ravel()
+                
+#                 if len(line_data) == 4:
+#                     # Probabilistic Hough result: (x1, y1, x2, y2)
+#                     x1, y1, x2, y2 = line_data
+#                     cv.line(fft_BGR, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+                    
+#                 elif len(line_data) == 2:
+#                     # Standard Hough fallback: (rho, theta)
+#                     rho, theta = line_data
+#                     a, b = np.cos(theta), np.sin(theta)
+#                     x0, y0 = a * rho, b * rho
+#                     x1 = int(x0 + 1000 * (-b))
+#                     y1 = int(y0 + 1000 * (a))
+#                     x2 = int(x0 - 1000 * (-b))
+#                     y2 = int(y0 - 1000 * (a))
+#                     cv.line(fft_BGR, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+
+#         cv.imshow('Grayscale FFT Magnitude', fft_BGR)
+#         cv.imshow('Grayscale Image', photo_gray)
+    
+#         cv.waitKey(0)
+
+#     if lines is not None:
+#         return len(lines)
+#     else:
+#         return 0
+#     # return len(lines) if lines is not None else 0
+    
+
+
+def frequency_domain_test(photo: cv.typing.MatLike):
+    photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
+
+    # 1. Grayscale FFT
+    photo_fft = np.fft.fft2(photo_gray)
+    photo_fft_shift = np.fft.fftshift(photo_fft)
+
+    # Save original phase angle (REQUIRED for inverse transform)
+    phase = np.angle(photo_fft_shift)
+
+    # Calculate magnitude spectrum for grayscale (log scale to make frequencies visible)
+    magnitude_gray = 20 * np.log(np.abs(photo_fft_shift) + 1)
+
+    log_min = magnitude_gray.min()
+    log_max = magnitude_gray.max()   
+    magnitude_gray = cv.normalize(magnitude_gray, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
+
+    ret, magnitude_thresh = cv.threshold(magnitude_gray, 150, 255, cv.THRESH_BINARY)
+
+    # Black out low frequencies (High-Pass Filter)
+    # Note: make a copy if you want to keep the unedited magnitude_gray separate
+    circle_size = min(magnitude_gray.shape[0], magnitude_gray.shape[1]) // 3
+    cv.circle(magnitude_gray, (magnitude_gray.shape[1]//2, magnitude_gray.shape[0]//2), circle_size, 0, thickness=-1)
+
+    # --- REVERSE TRANSFORM ---
+    # Step 1: Scale back from [0, 255] to log magnitude range
+    restored_log = (magnitude_gray.astype(np.float64) / 255.0) * (log_max - log_min) + log_min
+
+    # Step 2: Inverse of 20 * log(x + 1)
+    restored_magnitude = np.exp(restored_log / 20.0) - 1.0
+
+    # Step 3: Combine modified magnitude with original phase using Euler's formula: mag * exp(1j * phase)
+    modified_fft_shift = restored_magnitude * np.exp(1j * phase)
+
+    # Step 4: Shift back and perform 2D Inverse FFT
+    modified_fft = np.fft.ifftshift(modified_fft_shift)
+    inverse_complex = np.fft.ifft2(modified_fft)
+
+    # Step 5: Convert complex numbers to magnitude & normalize for OpenCV display
+    inverse_img = np.abs(inverse_complex)
+    inverse_img = cv.normalize(inverse_img, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
+
+    # Display results
+    cv.imshow('Grayscale FFT Magnitude', magnitude_thresh)
+    cv.imshow('FFT Circle Mask Applied', magnitude_gray)
+    cv.imshow('Inverse Reconstruction', inverse_img)
+    cv.imshow('photo', photo_gray)
+    cv.waitKey(0)
+    # fft_BGR = cv.cvtColor(magnitude_thresh, cv.COLOR_GRAY2BGR)
+
+
+
+def hsv_derivative_test(photo: cv.typing.MatLike):
+    hsv_photo = cv.cvtColor(photo, cv.COLOR_BGR2HSV)
+
+    h, s, v = cv.split(hsv_photo)
+
+    h_hist = cv.calcHist([h], [0], None, [256], [0, 256])
+    
+
+    # moving average
+    MAF_k_size = 20
+    MAF_kernel = np.ones(MAF_k_size) / MAF_k_size       # Create kernel that sums up to 1
+    h_hist_MAF = np.copy(h_hist)
+
+    h_hist_MAF = np.convolve(h_hist, MAF_kernel, mode='same')
+
+    h_hist_MAF_thresh = np.copy(h_hist_MAF)
+
+    # Calculate total
+    h_hist_MAF_total = np.sum(h_hist_MAF)
+    print("MAF TOTAL: {}".format(h_hist_MAF_total))
+    print("total pixels: {}".format(photo.shape[0] * photo.shape[1]))
+
+    for i in range(len(h_hist_MAF)):
+        if h_hist_MAF[i] >= 500:
+            h_hist_MAF_thresh[i] = 1
+        else:
+            h_hist_MAF_thresh[i] = 0
+
+    
+    # deriv
+    h_hist_deriv = np.gradient(h_hist_MAF)
+
+    
+    # visualisation
+    fig_h, ax_h = plt.subplots()
+    ax2_h = ax_h.twinx()
+    ax3_h = ax_h.twinx()
+
+
+    ax_h.cla()
+    ax2_h.cla()
+    ax3_h.cla()
+    # fig.canvas.manager.set_window_title('HSV Derivative Test')
+    
+    ax_h.plot(h_hist, color='r', alpha=0.5)
+    ax2_h.plot(h_hist_MAF, color='r', alpha=1, linestyle='--')
+    ax3_h.plot(h_hist_MAF_thresh, color='b', alpha=1)
+    
+    cv.imshow("photo", photo)
+    plt.show(block=False)
+    
+    cv.waitKey(0)
+
+    plt.close(fig_h)
+
+
+
+    
 for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     # Read image
     photo = cv.imread(file_path)
@@ -536,11 +711,14 @@ for file_path in glob.glob(TESTPHOTO_PATH + "/*.jpg"):
     photo = photo[0:h, 160:w-200]   
 
     photo_cropped = crop_to_component(photo)
-    body_mask(photo_cropped)
+    # body_mask(photo_cropped)
 
 
     file_component_name = os.path.basename(file_path)
     file_component_name = file_component_name.split("_")[0]
+
+    # frequency_domain_test(photo_cropped)
+    hsv_derivative_test(photo_cropped)
 
     # HSV_laplacian_edge_detection_test(photo)
     # colorspace_test(photo)

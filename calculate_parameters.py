@@ -261,6 +261,69 @@ def crop_to_component(photo: cv.typing.MatLike):
 
 
 
+def frequency_domain_test(photo: cv.typing.MatLike):
+    photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
+
+    # 1. Grayscale FFT
+    photo_fft = np.fft.fft2(photo_gray)
+    photo_fft_shift = np.fft.fftshift(photo_fft)
+
+    # Calculate magnitude spectrum for grayscale (log scale to make frequencies visible)
+    magnitude_gray = 20 * np.log(np.abs(photo_fft_shift) + 1)
+    # Normalize to [0, 255] for OpenCV rendering
+    magnitude_gray = cv.normalize(magnitude_gray, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
+
+    ret, magnitude_thresh = cv.threshold(magnitude_gray, 150, 255, cv.THRESH_BINARY)
+
+    fft_BGR = cv.cvtColor(magnitude_thresh, cv.COLOR_GRAY2BGR)
+
+
+
+    lines = cv.HoughLinesP(
+        magnitude_thresh, 
+        rho=1, 
+        theta=np.pi / 180, 
+        threshold=20, 
+        minLineLength=30, 
+        maxLineGap=40
+    )
+
+
+    if ENABLE_VERBOSE:
+        if lines is not None:
+            for line in lines:
+                # Flatten array to handle shape variations safely
+                line_data = line.ravel()
+                
+                if len(line_data) == 4:
+                    # Probabilistic Hough result: (x1, y1, x2, y2)
+                    x1, y1, x2, y2 = line_data
+                    cv.line(fft_BGR, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+                    
+                elif len(line_data) == 2:
+                    # Standard Hough fallback: (rho, theta)
+                    rho, theta = line_data
+                    a, b = np.cos(theta), np.sin(theta)
+                    x0, y0 = a * rho, b * rho
+                    x1 = int(x0 + 1000 * (-b))
+                    y1 = int(y0 + 1000 * (a))
+                    x2 = int(x0 - 1000 * (-b))
+                    y2 = int(y0 - 1000 * (a))
+                    cv.line(fft_BGR, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+
+        cv.imshow('Grayscale FFT Magnitude', fft_BGR)
+        cv.imshow('Grayscale Image', photo_gray)
+    
+        cv.waitKey(0)
+
+    if lines is not None:
+        return len(lines)
+    else:
+        return 0
+    # return len(lines) if lines is not None else 0
+
+
 # Main program
 if __name__ == "__main__":
 
@@ -270,6 +333,7 @@ if __name__ == "__main__":
     test_result_dict["circumference"] = []
     test_result_dict["IC_pincount"] = []
     test_result_dict["unique_colors"] = []
+    test_result_dict["fdt"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -296,9 +360,10 @@ if __name__ == "__main__":
 
         ##-- Parameter functions --##
         # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["IC_pincount"].append(IC_pincount(photo))
+        # test_result_dict["IC_pincount"].append(IC_pincount(photo))
         # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        test_result_dict["fdt"].append(frequency_domain_test(photo_cropped))
 
 
         ##-- Other test data (for plotting) --##
@@ -323,8 +388,9 @@ if __name__ == "__main__":
     calculated_data = pd.DataFrame(data = {"photo_num": test_result_dict["photo_number"],
                                           "component_name": test_result_dict["photo_component_name"],
                                         #   "circumference": test_result_dict["circumference"],
-                                          "IC_pincount": test_result_dict["IC_pincount"],
-                                          "unique_colors": test_result_dict["unique_colors"]
+                                        #   "IC_pincount": test_result_dict["IC_pincount"],
+                                        #   "unique_colors": test_result_dict["unique_colors"]
+                                          "fdt": test_result_dict["fdt"]
                                          }
                                   )
 
