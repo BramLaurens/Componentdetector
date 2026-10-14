@@ -430,8 +430,37 @@ def frequency_domain_test(photo: cv.typing.MatLike):
         "fft_lines": total_lines,
         "fft_opp": fft_opp
         }
-    
 
+def calculate_fill_factor(photo: cv.typing.MatLike):
+    diff = difference_from_empty(photo)
+    masked_photo = ((diff > 40).astype(np.uint8) * 255)
+
+    points = cv.findNonZero(masked_photo)       # Find non zero points and saave the coordinates of those.
+    convex_hull = cv.convexHull(points)         # Calculate the convex hull around those points
+
+    mask_area = cv.countNonZero(masked_photo)           # Calculate the area of the mask
+    convex_hull_area = cv.contourArea(convex_hull)      # Calculate the area of the convex hull
+
+    if mask_area == 0:
+        fill_factor = 0     # prevent DIV0 error
+    else:
+        fill_factor =  mask_area / convex_hull_area
+
+
+    if ENABLE_VERBOSE:
+        masked_photo_copy = cv.cvtColor(masked_photo, cv.COLOR_GRAY2BGR)
+        cv.drawContours(masked_photo_copy, [convex_hull], 0, (0, 0, 255), 2)
+        print("mask area: \t\t\t{}".format(mask_area))
+        print("Convex hull area: \t{}".format(convex_hull_area))
+        print("area difference\t {}".format(fill_factor))
+
+        # cv.imshow("Original", photo)
+        # cv.imshow("Difference", np.clip(diff*4, 0, 255).astype(np.uint8))
+        cv.imshow("fg", masked_photo)
+        cv.imshow("convex_hull", masked_photo_copy)
+        cv.waitKey(0)
+
+    return fill_factor
 
 # Main program
 if __name__ == "__main__":
@@ -445,6 +474,7 @@ if __name__ == "__main__":
     test_result_dict["unique_colors"] = []
     test_result_dict["fft_lines"] = []
     test_result_dict["fft_opp"] = []
+    test_result_dict["fill_factor"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -461,23 +491,26 @@ if __name__ == "__main__":
         if photo is None:
             print("No image found at path: {}".format(file_path))
             continue
+
         
         ##-- Pre processing --##
         # Crop out the turntable edges
         h, w, c = photo.shape
         photo = photo[0:h, 160:w-200]
         photo_cropped = crop_to_component(photo)
-        photo_masked = body_mask_diff_pipeline(photo)
+        # rubberband(photo)
 
         ##-- Parameter functions --##
         # test_result_dict["circumference"].append(circumference(photo))
         # test_result_dict["IC_pincount"].append(IC_pincount(photo))
         # test_result_dict["circumference"].append(circumference(photo))
-        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
+
         fft_test = frequency_domain_test(photo_cropped)
 
         test_result_dict["fft_lines"].append(fft_test["fft_lines"])
-        
+
         ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
         photo_count += 1                                                                    # Update the total photo_count
@@ -498,7 +531,12 @@ if __name__ == "__main__":
                                           "component_name": test_result_dict["photo_component_name"],
                                         #   "circumference": test_result_dict["circumference"],
                                         #   "IC_pincount": test_result_dict["IC_pincount"],
-                                        #   "unique_colors": test_result_dict["unique_colors"]
-                                          "fft_lines": test_result_dict["fft_lines"]
+                                          "unique_colors": test_result_dict["unique_colors"],
+                                          "fft_lines": test_result_dict["fft_lines"],
+                                          "fill_factor": test_result_dict["fill_factor"]
                                           }
                                   )
+
+    calculated_data.to_csv(CSV_NAME, index=False)
+
+    print("Saved values to csv file: {}, exiting.".format(CSV_NAME))
