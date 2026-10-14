@@ -23,6 +23,8 @@ CSV_NAME = "calculated_data.csv"
 
 # Variables 
 TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"               # Path where photos are found
+EMPTYPHOTO_PATH = "emptyphotos"
+EMPTYREFERENCE_PATH = "emptyphotos/empty_reference.jpg"  # Path where the empty reference photo is found. This photo is used to subtract the turntable from the image, so only the component remains.
 
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
@@ -259,6 +261,96 @@ def crop_to_component(photo: cv.typing.MatLike):
     return photo_cropped
 
 
+def body_mask_color(img_bgr, debug=False):
+    blur = cv.GaussianBlur(img_bgr, (15, 15), 0)
+    img_hsv = cv.cvtColor(blur, cv.COLOR_BGR2HSV)
+
+    lower1, upper1 = np.array([0, 120, 60]), np.array([14, 255, 255])
+    lower2, upper2 = np.array([165, 120, 60]), np.array([180, 255, 255])
+    bodymask = cv.inRange(img_hsv, lower1, upper1) | cv.inRange(img_hsv, lower2, upper2)
+
+    return bodymask
+
+#Builds a median reference image from all empty images
+def build_empty_reference():
+    empty_images = []
+    glob_empty_filelist = glob.glob(EMPTYPHOTO_PATH + "/*.jpg")
+    for file_path in glob_empty_filelist:
+        img = cv.imread(file_path)
+        if img is not None:
+            empty_images.append(img)
+
+    stack = np.stack(empty_images, axis=0)
+    reference = np.median(stack, axis=0).astype(np.uint8)
+    cv.imwrite("emptyphotos/empty_reference.jpg", reference)
+    return reference
+
+#loads the empty reference image, if it does not exist, it builds it first
+def load_empty_reference():
+    if not os.path.exists(EMPTYREFERENCE_PATH):
+        print("Empty reference image not found. Building empty reference...")
+        build_empty_reference()
+    return cv.imread(EMPTYREFERENCE_PATH)
+
+# clacluate the differece between the current image and the empty reference image, returns a 2D array of the difference
+def difference_from_empty(img):
+    ref = load_empty_reference()
+    a_blur = cv.GaussianBlur(img,(5,5), 0)
+    b_blur = cv.GaussianBlur(ref,(5,5), 0)
+    a = cv.cvtColor(a_blur, cv.COLOR_BGR2LAB).astype(np.float32)
+    b = cv.cvtColor(b_blur, cv.COLOR_BGR2LAB).astype(np.float32)
+    #subtract the two arrays
+    d = a - b
+    #subtract the median of the difference to compensate for lighting changes
+    d-=np.median(d, axis=0)
+    #return the squared sum of the difference, which is a 2D array of the difference (distance in lab space)
+    return np.linalg.norm(d, axis=2)
+
+def body_mask_diff(mask, lead_width = 6, min_area=300):
+    #Create kernel for morphological operations, the size of the kernel is based on the lead width of the component
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (lead_width+3, lead_width+3))
+    # Apply morphological operations to remove noise and fill holes in the mask
+    body = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
+    body = cv.morphologyEx(body, cv.MORPH_CLOSE, kernel)
+    n, labels, stats, _ = cv.connectedComponentsWithStats(body)
+    if n <= 1:
+        return np.zeros_like(body)
+    # Find the largest connected component (the body of the component)
+    largest = 1 + np.argmax(stats[1:, cv.CC_STAT_AREA])
+    if stats[largest, cv.CC_STAT_AREA] < min_area:
+        return np.zeros_like(body)
+    return np.where(labels == largest, 255, 0).astype(np.uint8)
+
+def body_mask_diff_pipeline(img):
+    cv.imshow("Original", img)
+    diff = difference_from_empty(img)
+    cv.imshow("Difference", np.clip(diff*4, 0, 255).astype(np.uint8))
+    fg = ((diff > 40).astype(np.uint8) * 255)
+    cv.imshow("Foreground", fg)
+
+    #crop out the turntable edges
+    h, w = fg.shape
+    fg = fg[0:h, 160:w-200]
+    body = body_mask_diff(fg, lead_width=6, min_area=300)
+
+    cv.imshow("Body", body)
+    cv.waitKey(0)
+
+def body_mask_HSV(photo: cv.typing.MatLike):
+    # Convert photo to HSV and apply a blur prevent white spots in threshold
+    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV)
+    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
+
+    h, s, v = cv.split(photo_HSV_blur)
+
+    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    # Increase contrast by 1.1 to make some connectors more visible
+    ret, thresh = cv.threshold(s, 100, 255, cv.THRESH_BINARY)
+
+    body_masked = cv.bitwise_and(photo, photo, mask=thresh)
+
+    cv.imshow("mask", body_masked)
+
+    return body_masked
 
 def frequency_domain_test(photo: cv.typing.MatLike):
     photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
@@ -371,6 +463,7 @@ if __name__ == "__main__":
         h, w, c = photo.shape
         photo = photo[0:h, 160:w-200]
         photo_cropped = crop_to_component(photo)
+        photo_masked = body_mask_diff(photo)
 
 
         ##-- Parameter functions --##
@@ -398,9 +491,6 @@ if __name__ == "__main__":
 
     if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
 
-    print("{} - Starting result visualisation".format(current_time()))
-
-
     calculated_data = pd.DataFrame(data = {"photo_num": test_result_dict["photo_number"],
                                           "component_name": test_result_dict["photo_component_name"],
                                         #   "circumference": test_result_dict["circumference"],
@@ -409,5 +499,3 @@ if __name__ == "__main__":
                                           "fft_lines": test_result_dict["fft_lines"]
                                           }
                                   )
-
-    calculated_data.to_csv(CSV_NAME, index=True, index_label="pd_index")
