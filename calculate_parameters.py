@@ -290,7 +290,11 @@ def load_empty_reference():
     if not os.path.exists(EMPTYREFERENCE_PATH):
         print("Empty reference image not found. Building empty reference...")
         build_empty_reference()
-    return cv.imread(EMPTYREFERENCE_PATH)
+
+    img = cv.imread(EMPTYREFERENCE_PATH)
+    h, w, c = img.shape
+    img = img[0:h, 160:w-200]
+    return img
 
 # clacluate the differece between the current image and the empty reference image, returns a 2D array of the difference
 def difference_from_empty(img):
@@ -463,8 +467,7 @@ if __name__ == "__main__":
         h, w, c = photo.shape
         photo = photo[0:h, 160:w-200]
         photo_cropped = crop_to_component(photo)
-        photo_masked = body_mask_diff(photo)
-
+        photo_masked = body_mask_diff_pipeline(photo)
 
         ##-- Parameter functions --##
         # test_result_dict["circumference"].append(circumference(photo))
