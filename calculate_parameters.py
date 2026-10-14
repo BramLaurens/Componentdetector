@@ -188,9 +188,8 @@ def IC_pincount(photo: cv.typing.MatLike):
 def count_unique_colors(photo: cv.typing.MatLike):
     # To create a body mask, we use the s channel of the HSV colorspace
     photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV_FULL)
-    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
 
-    h, s, v = cv.split(photo_HSV_blur)
+    h, s, v = cv.split(photo_HSV)
 
     # Increase contrast by 1.1 to make some connectors more visible, and apply a threshold
     s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    
@@ -353,8 +352,86 @@ def body_mask_HSV(photo: cv.typing.MatLike):
 
     return body_masked
 
+def frequency_domain_test(photo: cv.typing.MatLike):
+    photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
+
+    # 1. Grayscale FFT
+    photo_fft = np.fft.fft2(photo_gray)
+    photo_fft_shift = np.fft.fftshift(photo_fft)
+
+    # Calculate magnitude spectrum for grayscale (log scale to make frequencies visible)
+    magnitude_gray = 20 * np.log(np.abs(photo_fft_shift) + 1)
+    # Normalize to [0, 255] for OpenCV rendering
+    magnitude_gray = cv.normalize(magnitude_gray, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
+
+    ret, magnitude_thresh = cv.threshold(magnitude_gray, 150, 255, cv.THRESH_BINARY)
+
+    # fft_BGR = cv.cvtColor(magnitude_thresh, cv.COLOR_GRAY2BGR)
+
+
+
+    lines = cv.HoughLinesP(
+        magnitude_thresh, 
+        rho=1, 
+        theta=np.pi / 180, 
+        threshold=20, 
+        minLineLength=30, 
+        maxLineGap=40
+    )
+
+
+    if ENABLE_VERBOSE:
+
+        # Draw hough lines
+        if lines is not None:
+            for line in lines:
+                # Flatten array to handle shape variations safely
+                line_data = line.ravel()
+                
+                if len(line_data) == 4:
+                    # Probabilistic Hough result: (x1, y1, x2, y2)
+                    x1, y1, x2, y2 = line_data
+                    cv.line(magnitude_gray, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+                    
+                elif len(line_data) == 2:
+                    # Standard Hough fallback: (rho, theta)
+                    rho, theta = line_data
+                    a, b = np.cos(theta), np.sin(theta)
+                    x0, y0 = a * rho, b * rho
+                    x1 = int(x0 + 1000 * (-b))
+                    y1 = int(y0 + 1000 * (a))
+                    x2 = int(x0 - 1000 * (-b))
+                    y2 = int(y0 - 1000 * (a))
+                    cv.line(magnitude_gray, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+        cv.imshow('Grayscale FFT Magnitude', magnitude_gray)
+        cv.imshow('Grayscale Image', photo_gray)
+
+        cv.waitKey(0)
+
+    total_lines = 0
+    if lines is not None:
+        total_lines = len(lines)
+    else:
+        total_lines = 0
+
+    fft_opp = 0
+    opp = cv.countNonZero(magnitude_thresh)
+    if opp is not None:
+        fft_opp = opp
+    else:
+        fft_opp = 0
+
+    return {
+        "fft_lines": total_lines,
+        "fft_opp": fft_opp
+        }
+    
+
+
 # Main program
 if __name__ == "__main__":
+
 
     ##-- Processing --##
     # Create the necessary lists in the test_result_dict, every test needs a list.
@@ -362,6 +439,8 @@ if __name__ == "__main__":
     test_result_dict["circumference"] = []
     test_result_dict["IC_pincount"] = []
     test_result_dict["unique_colors"] = []
+    test_result_dict["fft_lines"] = []
+    test_result_dict["fft_opp"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -381,16 +460,42 @@ if __name__ == "__main__":
         
         ##-- Pre processing --##
         # Crop out the turntable edges
-        # h, w, c = photo.shape
-        # photo = photo[0:h, 160:w-200]
-        # photo_cropped = crop_to_component(photo)
+        h, w, c = photo.shape
+        photo = photo[0:h, 160:w-200]
+        photo_cropped = crop_to_component(photo)
+        photo_masked = body_mask_diff(photo)
 
 
-        # bodymask = body_mask(photo_cropped)
+        ##-- Parameter functions --##
+        # test_result_dict["circumference"].append(circumference(photo))
+        # test_result_dict["IC_pincount"].append(IC_pincount(photo))
+        # test_result_dict["circumference"].append(circumference(photo))
+        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        fft_test = frequency_domain_test(photo_cropped)
 
-        # cv.imshow("Cropped photo", photo_cropped)
-        # cv.imshow("Body mask", bodymask)
-        # cv.waitKey(0)
-        diff_mask = body_mask_diff_pipeline(photo)
+        test_result_dict["fft_lines"].append(fft_test["fft_lines"])
+        
+        ##-- Other test data (for plotting) --##
+        test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
+        photo_count += 1                                                                    # Update the total photo_count
+        test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
 
-    cv.destroyAllWindows()
+
+        # Give output to the user on every 100 photos analyzed. This gives the user insight in the programs speed.
+        if photo_count % 100 == 0:
+            print("{} Current photo count: {}/{}".format(current_time(), photo_count, len(glob_filelist)))
+
+
+    # Done processing
+    print("{} - Done calculating. Total photos tested: {}".format(current_time(), photo_count))
+
+    if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
+
+    calculated_data = pd.DataFrame(data = {"photo_num": test_result_dict["photo_number"],
+                                          "component_name": test_result_dict["photo_component_name"],
+                                        #   "circumference": test_result_dict["circumference"],
+                                        #   "IC_pincount": test_result_dict["IC_pincount"],
+                                        #   "unique_colors": test_result_dict["unique_colors"]
+                                          "fft_lines": test_result_dict["fft_lines"]
+                                          }
+                                  )
