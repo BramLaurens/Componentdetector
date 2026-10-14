@@ -14,27 +14,14 @@ sns.set_theme(style="ticks", palette="pastel")
 if __name__ == "__main__":
     ##-- Visualisation --##
     #### ---- IC_pincount ---- ####
-    # START Gemini (AI) helped this bit, this generates our third scatter parameter, frequency of appearing and makes a new dictionary (grouped) that has the new information
-
     calculated_parameters = pd.read_csv(CSV_NAME)
 
-
-
-
-
+    #### ---- DFT lines per component ---- ####
     plt.figure("DFT lines per component", figsize=(16, 9), layout="constrained")
     plt.title("DFT lines per component")
-    counts = (
-        calculated_parameters.groupby(["component_name", "fft_lines"])
-        .size()
-        .reset_index(name="frequency")
-    )
     dft_lines_plot = sns.boxplot(x="component_name", y="fft_lines", 
-                                       data=counts)  
-
-    dft_lines_plot.set_xlabel("")
-    dft_lines_plot.set_ylabel("Aantal lijnen [n]")
-    
+                                       data=calculated_parameters)  
+        
     dft_lines_plot.set_title("Aantal lijnen in fft per component", fontsize=PLT_FONT_SIZE*1.5)
     dft_lines_plot.xaxis.set_label_text("")
     dft_lines_plot.yaxis.set_label_text("Aantal lijnen [n]", fontsize=PLT_FONT_SIZE*1.2)
@@ -42,71 +29,66 @@ if __name__ == "__main__":
     dft_lines_plot.tick_params(axis='x', labelsize=PLT_FONT_SIZE, rotation=45, labelrotation_mode='xtick')
     dft_lines_plot.tick_params(axis='y', labelsize=PLT_FONT_SIZE)   
 
+    #### ---- Unique Colors ---- ####
+    plt.figure("Unique Colors", figsize=(16, 9), layout="constrained")
+    plt.title("Unique colors per component")
+    unique_colors_plot = sns.boxplot(x="component_name", y="unique_colors",
+                                    data=calculated_parameters)
 
-    plt.figure("DFT opp per component", figsize=(16, 9), layout="constrained")
-    plt.title("DFT opp per component")
-    counts = (
-        calculated_parameters.groupby(["component_name", "fft_opp"])
-        .size()
-        .reset_index(name="frequency")
+    unique_colors_plot.set_title("Unieke kleuren per pixel per component", fontsize=PLT_FONT_SIZE*1.5)
+    unique_colors_plot.xaxis.set_label_text("")
+    unique_colors_plot.yaxis.set_label_text("Aantal kleuren [n]", fontsize=PLT_FONT_SIZE*1.2)
+    
+    unique_colors_plot.tick_params(axis='x', labelsize=PLT_FONT_SIZE, rotation=45, labelrotation_mode='xtick')
+    unique_colors_plot.tick_params(axis='y', labelsize=PLT_FONT_SIZE)
+
+
+    #### ---- Fill factor ---- ####
+    plt.figure("Fill factor Per component", figsize=(16, 9), layout="constrained")
+    plt.title("Fill factor Per component")
+    ff_plot = sns.boxplot(x="component_name", y="fill_factor", 
+                                       data=calculated_parameters)  
+
+    ff_plot.set_title("Fill factor per component", fontsize=PLT_FONT_SIZE*1.5)
+    ff_plot.xaxis.set_label_text("")
+    ff_plot.yaxis.set_label_text("Fill factor [%]", fontsize=PLT_FONT_SIZE*1.2)
+
+    ff_plot.tick_params(axis='x', labelsize=PLT_FONT_SIZE, rotation=45, labelrotation_mode='xtick')
+    ff_plot.tick_params(axis='y', labelsize=PLT_FONT_SIZE)   
+
+
+    #### ---- Fill factor ---- ####
+    # plt.figure("Pairplot", figsize=(16, 9), layout="constrained")
+    # plt.title("Pairplot")
+
+    data = calculated_parameters[["fft_lines", "fill_factor", "unique_colors", "component_name"]]
+    pairplot_plot = sns.pairplot(data, hue="component_name", palette="Set2", plot_kws={'s': 15})
+
+    pairplot_plot.figure.set_size_inches(16, 9)
+    pairplot_plot.figure.canvas.manager.set_window_title("Component Parameter Pairplot")
+    pairplot_plot.figure.subplots_adjust(top=0.80)
+
+    if pairplot_plot._legend:
+        pairplot_plot._legend.remove()
+
+    handles = pairplot_plot._legend_data.values()
+    labels = pairplot_plot._legend_data.keys()
+
+
+    pairplot_legend = pairplot_plot.figure.legend(
+        handles=handles, 
+        labels=labels, 
+        loc="upper center", 
+        bbox_to_anchor=(0.5, 0.94), 
+        ncol=7,  # 4 columns fit nicely horizontally across a 16x9 window
+        frameon=False
     )
-    dft_opp_plot = sns.boxplot(x="component_name", y="fft_opp", 
-                                        data=counts)  
 
-    dft_opp_plot.set_xlabel("")
-    dft_opp_plot.set_ylabel("oppervlak [px]")
+    for handle in pairplot_legend.legend_handles:
+        if hasattr(handle, "set_marker"):
+            handle.set_marker("s")
+            handle.set_markersize(10)
     
-    dft_opp_plot.set_title("oppervlak in fft per component", fontsize=PLT_FONT_SIZE*1.5)
-    dft_opp_plot.xaxis.set_label_text("")
-    dft_opp_plot.yaxis.set_label_text("oppervlak [px]", fontsize=PLT_FONT_SIZE*1.2)
-    
-    dft_opp_plot.tick_params(axis='x', labelsize=PLT_FONT_SIZE, rotation=45, labelrotation_mode='xtick')
-    dft_opp_plot.tick_params(axis='y', labelsize=PLT_FONT_SIZE)   
-    
-
-    
-
-
-    # # Grab parameters from file
-    # component_name_list = calculated_parameters["component_name"].to_list()
-    # IC_pincount_list = calculated_parameters["IC_pincount"].to_list()
-    # unique_colors_list = calculated_parameters["unique_colors"].to_list()
-
-
-
-    # plt.figure(1)
-    # plt.title("IC_Pinout per component")
-
-    # counts = (
-    #     calculated_parameters.groupby(["component_name", "IC_pincount"])
-    #     .size()
-    #     .reset_index(name="frequency")
-    # )
-    # IC_pincount_plot = sns.scatterplot(x="component_name", y="IC_pincount", 
-    #                                    data=counts,
-    #                                    hue="frequency",       
-    #                                    size="frequency",      
-    #                                    sizes=(40, 300),   
-    #                                    palette="flare",)     
-
-
-
-    # #### ---- END IC_pincount ---- ####
-
-    # plt.figure("Unique Colors", figsize=(16, 9), layout="constrained")
-    # plt.title("Unique colors per component")
-    # unique_colors_plot = sns.boxplot(x="component_name", y="unique_colors",
-    #                                 data=calculated_parameters)
-    # unique_colors_plot.set_xlabel("")
-    # unique_colors_plot.set_ylabel("unique colors [n]")
-    
-    # unique_colors_plot.set_title("Unieke kleuren per pixel per component", fontsize=PLT_FONT_SIZE*1.5)
-    # unique_colors_plot.xaxis.set_label_text("")
-    # unique_colors_plot.yaxis.set_label_text("Aantal kleuren [n]", fontsize=PLT_FONT_SIZE*1.2)
-    
-    # unique_colors_plot.tick_params(axis='x', labelsize=PLT_FONT_SIZE, rotation=45, labelrotation_mode='xtick')
-    # unique_colors_plot.tick_params(axis='y', labelsize=PLT_FONT_SIZE)
-
-    # plt.tight_layout()
+    plt.tight_layout()
     # plt.subplots_adjust(left=0.1)
     plt.show()
