@@ -186,9 +186,8 @@ def IC_pincount(photo: cv.typing.MatLike):
 def count_unique_colors(photo: cv.typing.MatLike):
     # To create a body mask, we use the s channel of the HSV colorspace
     photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV_FULL)
-    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
 
-    h, s, v = cv.split(photo_HSV_blur)
+    h, s, v = cv.split(photo_HSV)
 
     # Increase contrast by 1.1 to make some connectors more visible, and apply a threshold
     s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    
@@ -275,7 +274,7 @@ def frequency_domain_test(photo: cv.typing.MatLike):
 
     ret, magnitude_thresh = cv.threshold(magnitude_gray, 150, 255, cv.THRESH_BINARY)
 
-    fft_BGR = cv.cvtColor(magnitude_thresh, cv.COLOR_GRAY2BGR)
+    # fft_BGR = cv.cvtColor(magnitude_thresh, cv.COLOR_GRAY2BGR)
 
 
 
@@ -290,6 +289,8 @@ def frequency_domain_test(photo: cv.typing.MatLike):
 
 
     if ENABLE_VERBOSE:
+
+        # Draw hough lines
         if lines is not None:
             for line in lines:
                 # Flatten array to handle shape variations safely
@@ -298,7 +299,7 @@ def frequency_domain_test(photo: cv.typing.MatLike):
                 if len(line_data) == 4:
                     # Probabilistic Hough result: (x1, y1, x2, y2)
                     x1, y1, x2, y2 = line_data
-                    cv.line(fft_BGR, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+                    cv.line(magnitude_gray, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
                     
                 elif len(line_data) == 2:
                     # Standard Hough fallback: (rho, theta)
@@ -309,23 +310,36 @@ def frequency_domain_test(photo: cv.typing.MatLike):
                     y1 = int(y0 + 1000 * (a))
                     x2 = int(x0 - 1000 * (-b))
                     y2 = int(y0 - 1000 * (a))
-                    cv.line(fft_BGR, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                    cv.line(magnitude_gray, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-
-        cv.imshow('Grayscale FFT Magnitude', fft_BGR)
+        cv.imshow('Grayscale FFT Magnitude', magnitude_gray)
         cv.imshow('Grayscale Image', photo_gray)
-    
+
         cv.waitKey(0)
 
+    total_lines = 0
     if lines is not None:
-        return len(lines)
+        total_lines = len(lines)
     else:
-        return 0
-    # return len(lines) if lines is not None else 0
+        total_lines = 0
+
+    fft_opp = 0
+    opp = cv.countNonZero(magnitude_thresh)
+    if opp is not None:
+        fft_opp = opp
+    else:
+        fft_opp = 0
+
+    return {
+        "fft_lines": total_lines,
+        "fft_opp": fft_opp
+        }
+    
 
 
 # Main program
 if __name__ == "__main__":
+
 
     ##-- Processing --##
     # Create the necessary lists in the test_result_dict, every test needs a list.
@@ -333,7 +347,8 @@ if __name__ == "__main__":
     test_result_dict["circumference"] = []
     test_result_dict["IC_pincount"] = []
     test_result_dict["unique_colors"] = []
-    test_result_dict["fdt"] = []
+    test_result_dict["fft_lines"] = []
+    test_result_dict["fft_opp"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -363,16 +378,17 @@ if __name__ == "__main__":
         # test_result_dict["IC_pincount"].append(IC_pincount(photo))
         # test_result_dict["circumference"].append(circumference(photo))
         # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
-        test_result_dict["fdt"].append(frequency_domain_test(photo_cropped))
+        fft_test = frequency_domain_test(photo_cropped)
 
-
+        test_result_dict["fft_lines"].append(fft_test["fft_lines"])
+        
         ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
         photo_count += 1                                                                    # Update the total photo_count
         test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
 
 
-        # Give output to the user on every 500 photos analyzed. This gives the user insight in the programs speed.
+        # Give output to the user on every 100 photos analyzed. This gives the user insight in the programs speed.
         if photo_count % 100 == 0:
             print("{} Current photo count: {}/{}".format(current_time(), photo_count, len(glob_filelist)))
 
@@ -390,8 +406,8 @@ if __name__ == "__main__":
                                         #   "circumference": test_result_dict["circumference"],
                                         #   "IC_pincount": test_result_dict["IC_pincount"],
                                         #   "unique_colors": test_result_dict["unique_colors"]
-                                          "fdt": test_result_dict["fdt"]
-                                         }
+                                          "fft_lines": test_result_dict["fft_lines"]
+                                          }
                                   )
 
     calculated_data.to_csv(CSV_NAME, index=True, index_label="pd_index")
