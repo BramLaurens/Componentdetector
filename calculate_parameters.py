@@ -183,6 +183,57 @@ def IC_pincount(photo: cv.typing.MatLike):
     # Return value
     return contour_count
 
+def pin_count(photo: cv.typing.MatLike):
+    diff = difference_from_empty(photo)
+    masked_photo = ((diff > 40).astype(np.uint8) * 255)
+
+    h, w = masked_photo.shape
+    masked_photo = masked_photo[0:h, 160:w-200]
+    body = body_mask_diff(masked_photo, lead_width=12, min_area=300)
+    body = cv.dilate(body, np.ones((21,21), np.uint8), iterations=1)
+
+
+
+    pins_mask = cv.subtract(masked_photo, body)
+    pins_mask_shape = pins_mask.shape
+    skel = np.zeros(pins_mask_shape, np.uint8)
+
+    element = cv.getStructuringElement(cv.MORPH_CROSS, (3, 3))
+    img = pins_mask.copy()
+    while True:
+        eroded = cv.erode(img, element)
+        temp = cv.dilate(eroded, element)
+        temp = cv.subtract(img, temp)
+        skel = cv.bitwise_or(skel, temp)
+        img = eroded.copy()
+        
+        if cv.countNonZero(img) == 0:
+            break
+
+    
+
+    lines = cv.HoughLinesP(skel, 1, np.pi / 180, 80, None, 60, 40)
+    lines_image = cv.cvtColor(skel, cv.COLOR_GRAY2BGR)
+
+    if lines is not None:
+        print(f"Found {len(lines)} line segments.")
+
+        for line in lines:
+            # HoughLinesP returns lines as [x1, y1, x2, y2] nested inside an extra dimension
+            x1, y1, x2, y2 = line
+            cv.line(lines_image, (x1, y1), (x2, y2), (0, 0, 255), thickness=1)
+
+   
+
+    cv.imshow("Body", body)
+    cv.imshow("Masked Photo", masked_photo)
+    cv.imshow("skeleton", skel)
+
+    cv.imshow("lines", lines_image)
+
+
+    cv.waitKey(0)
+
 
 
 def count_unique_colors(photo: cv.typing.MatLike):
@@ -504,12 +555,12 @@ if __name__ == "__main__":
         # test_result_dict["circumference"].append(circumference(photo))
         # test_result_dict["IC_pincount"].append(IC_pincount(photo))
         # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
-        test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
+        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        # test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
 
-        fft_test = frequency_domain_test(photo_cropped)
-
-        test_result_dict["fft_lines"].append(fft_test["fft_lines"])
+        pin_count(photo)
+        # fft_test = frequency_domain_test(photo_cropped)
+        # test_result_dict["fft_lines"].append(fft_test["fft_lines"])
 
         ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
