@@ -310,6 +310,7 @@ def difference_from_empty(img):
     #return the squared sum of the difference, which is a 2D array of the difference (distance in lab space)
     return np.linalg.norm(d, axis=2)
 
+# Calculate the body mask from a difference image
 def body_mask_diff(mask, lead_width = 6, min_area=300):
     #Create kernel for morphological operations, the size of the kernel is based on the lead width of the component
     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (lead_width+3, lead_width+3))
@@ -325,36 +326,52 @@ def body_mask_diff(mask, lead_width = 6, min_area=300):
         return np.zeros_like(body)
     return np.where(labels == largest, 255, 0).astype(np.uint8)
 
+# Main pipeline for calculating the body mask from a difference image, returns the body mask as a binary image (0 for background, 255 for body)
 def body_mask_diff_pipeline(img):
-    cv.imshow("Original", img)
+    # Calculate the difference between the current image and the empty reference, returns a 2D array of the difference (distance in lab space)
     diff = difference_from_empty(img)
-    cv.imshow("Difference", np.clip(diff*4, 0, 255).astype(np.uint8))
+    # Create a binary mask from the difference image, where pixels with a difference greater than 40 are considered foreground, only shows white pixels where the component is, not the entire image
     fg = ((diff > 40).astype(np.uint8) * 255)
-    cv.imshow("Foreground", fg)
 
     #crop out the turntable edges
     h, w = fg.shape
     fg = fg[0:h, 160:w-200]
-    body = body_mask_diff(fg, lead_width=6, min_area=300)
+    # Calculate the body mask from the foreground mask using morphological operations
+    body = body_mask_diff(fg, lead_width=10, min_area=300)
 
-    cv.imshow("Body", body)
-    cv.waitKey(0)
+    if ENABLE_VERBOSE:
+        cv.imshow("Original", img)
+        # Show the difference image, scaled for visibility, only shows the differences, not the entire image
+        cv.imshow("Difference", np.clip(diff*4, 0, 255).astype(np.uint8))
+        cv.imshow("Foreground", fg)
+        cv.imshow("Body", body)
+        cv.waitKey(0)
+    return body
 
-def body_mask_HSV(photo: cv.typing.MatLike):
-    # Convert photo to HSV and apply a blur prevent white spots in threshold
-    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV)
-    photo_HSV_blur = cv.GaussianBlur(photo_HSV, (15,15), 0)
+def body_aspect_ratio(body_mask: cv.typing.MatLike):
+    contours,_ = cv.findContours(body_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return 0
 
-    h, s, v = cv.split(photo_HSV_blur)
+    # Find the largest contour from the contours list, by key contourArea
+    body_contour = max(contours, key=cv.contourArea)
+    # Fit the smallest rectangle around the body contour and return center coordinates, width, height and angle of the rectangle
+    (cx, cy), (w,h), angle = cv.minAreaRect(body_contour)
 
-    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    # Increase contrast by 1.1 to make some connectors more visible
-    ret, thresh = cv.threshold(s, 100, 255, cv.THRESH_BINARY)
+    # Prevent division by zero, if either width or height is 0, return 0
+    if min(w,h) == 0:
+        return 0
+    # Calculate the aspect ratio of the body mask, which is the longest side divided by the shortest side
+    ratio = max(w,h) / min(w,h)
+    if ENABLE_VERBOSE:
+        box = cv.boxPoints(((cx, cy), (w,h), angle)).astype(np.int32)
+        vis = cv.cvtColor(body_mask, cv.COLOR_GRAY2BGR)
+        cv.drawContours(vis, [box], 0, (0,0,255),2)
+        print("Aspect ratio: {:.2f}".format(ratio))
+        cv.imshow("minAreaRect", vis)
+        cv.waitKey(0)
+    return ratio
 
-    body_masked = cv.bitwise_and(photo, photo, mask=thresh)
-
-    cv.imshow("mask", body_masked)
-
-    return body_masked
 
 def frequency_domain_test(photo: cv.typing.MatLike):
     photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
@@ -475,6 +492,7 @@ if __name__ == "__main__":
     test_result_dict["fft_lines"] = []
     test_result_dict["fft_opp"] = []
     test_result_dict["fill_factor"] = []
+    test_result_dict["aspect_ratio"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -492,26 +510,28 @@ if __name__ == "__main__":
             print("No image found at path: {}".format(file_path))
             continue
 
-        
         ##-- Pre processing --##
         # Crop out the turntable edges
         h, w, c = photo.shape
         photo = photo[0:h, 160:w-200]
-        photo_cropped = crop_to_component(photo)
-        # rubberband(photo)
+        body_mask = body_mask_diff_pipeline(photo)
+        aspect_ratio = body_aspect_ratio(body_mask)
+        # photo_cropped = crop_to_component(photo)
+        # # rubberband(photo)
 
-        ##-- Parameter functions --##
-        # test_result_dict["circumference"].append(circumference(photo))
-        # test_result_dict["IC_pincount"].append(IC_pincount(photo))
-        # test_result_dict["circumference"].append(circumference(photo))
-        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
-        test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
+        # ##-- Parameter functions --##
+        # # test_result_dict["circumference"].append(circumference(photo))
+        # # test_result_dict["IC_pincount"].append(IC_pincount(photo))
+        # # test_result_dict["circumference"].append(circumference(photo))
+        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        # test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
+        test_result_dict["aspect_ratio"].append(aspect_ratio)
 
-        fft_test = frequency_domain_test(photo_cropped)
+        # fft_test = frequency_domain_test(photo_cropped)
 
-        test_result_dict["fft_lines"].append(fft_test["fft_lines"])
+        # test_result_dict["fft_lines"].append(fft_test["fft_lines"])
 
-        ##-- Other test data (for plotting) --##
+        # ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
         photo_count += 1                                                                    # Update the total photo_count
         test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
@@ -531,9 +551,10 @@ if __name__ == "__main__":
                                           "component_name": test_result_dict["photo_component_name"],
                                         #   "circumference": test_result_dict["circumference"],
                                         #   "IC_pincount": test_result_dict["IC_pincount"],
-                                          "unique_colors": test_result_dict["unique_colors"],
-                                          "fft_lines": test_result_dict["fft_lines"],
-                                          "fill_factor": test_result_dict["fill_factor"]
+                                        #   "unique_colors": test_result_dict["unique_colors"],
+                                        #   "fft_lines": test_result_dict["fft_lines"],
+                                        #   "fill_factor": test_result_dict["fill_factor"],
+                                          "body_aspect_ratio": test_result_dict["aspect_ratio"]
                                           }
                                   )
 
