@@ -345,7 +345,7 @@ def body_mask_diff_pipeline(img):
         cv.imshow("Difference", np.clip(diff*4, 0, 255).astype(np.uint8))
         cv.imshow("Foreground", fg)
         cv.imshow("Body", body)
-        cv.waitKey(0)
+        # cv.waitKey(0)
     return body
 
 def body_aspect_ratio(body_mask: cv.typing.MatLike):
@@ -371,6 +371,76 @@ def body_aspect_ratio(body_mask: cv.typing.MatLike):
         cv.imshow("minAreaRect", vis)
         cv.waitKey(0)
     return ratio
+
+# Find circles in the body mask using Hough Circle Transform, returns a list of circles
+def find_circles(body_mask: cv.typing.MatLike):
+    cv.GaussianBlur(body_mask, (9,9), 2)
+    circles = cv.HoughCircles(body_mask, cv.HOUGH_GRADIENT, dp=1, minDist=20, param1=50, param2=10, minRadius=5, maxRadius=0)
+
+    if circles is None:
+        if ENABLE_VERBOSE:
+            print("No circles found in body mask.")
+        return np.empty((0, 3), dtype=np.uint32)
+
+    circles = np.around(circles).astype(np.uint32)
+
+    if ENABLE_VERBOSE:
+        vis = cv.cvtColor(body_mask, cv.COLOR_GRAY2BGR)
+        for i in circles[0, :]:
+            cv.circle(vis,(i[0], i[1]), i[2], (0, 255, 0), 2)
+            cv.circle(vis,(i[0], i[1]), 2, (0, 0, 255), 3)
+        cv.imshow("Hough Circles", vis)
+        # cv.waitKey(0)
+
+    return circles
+
+# Calculate how much o the total edge is covered by circles. Returns a coverageratio between 0 and 1.
+def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
+    EDGE_THICKNESS = 1
+
+    if circles.size == 0:
+        return 0.0
+
+    # Draw body contours as thick white band
+    contours, _ = cv.findContours(body_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    edge = np.zeros_like(body_mask)
+    edge_overlap = np.zeros_like(body_mask)
+    cv.drawContours(edge, contours, -1, 255, EDGE_THICKNESS)
+
+    edge_pixels = cv.countNonZero(edge)
+
+    if edge_pixels == 0:
+        return 0.0
+
+    overlap_pixels = 0
+
+
+    # Loop through all circles and count how many pixels of the edge are covered by the circle. The coverage ratio is calculated as the number of edge pixels covered by the circle divided by the total number of edge pixels.
+    for cx, cy, r in circles[0, :]:
+        if body_mask[cy, cx] == 0:
+            continue
+
+        # Create a circle image with the same size as the body mask, draw the circle on it
+        circle_img = np.zeros_like(body_mask)
+        cv.circle(circle_img, (int(cx), int(cy)), int(r), 255, 1)
+
+        # Calculate the overlap between the edge and the circle
+        overlap = cv.bitwise_and(edge, circle_img)
+        # Add overlap to the edge_overlap image for visualization
+        edge_overlap = cv.bitwise_or(edge_overlap, overlap)
+        overlap_pixels += cv.countNonZero(overlap)
+
+    coverage_ratio = overlap_pixels / edge_pixels
+
+    if ENABLE_VERBOSE:
+        print("Circle edge coverage: {:.2f}%".format(coverage_ratio *100))
+        cv.imshow("Edge", edge)
+        cv.imshow("Edge overlap", edge_overlap)
+        cv.waitKey(0)
+    return coverage_ratio
+
+
+
 
 
 def frequency_domain_test(photo: cv.typing.MatLike):
@@ -493,6 +563,7 @@ if __name__ == "__main__":
     test_result_dict["fft_opp"] = []
     test_result_dict["fill_factor"] = []
     test_result_dict["aspect_ratio"] = []
+    test_result_dict["circle_coverage"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -515,7 +586,9 @@ if __name__ == "__main__":
         h, w, c = photo.shape
         photo = photo[0:h, 160:w-200]
         body_mask = body_mask_diff_pipeline(photo)
-        aspect_ratio = body_aspect_ratio(body_mask)
+        circles = find_circles(body_mask)
+        circle_coverage = circle_edge_coverage(body_mask, circles)
+        # aspect_ratio = body_aspect_ratio(body_mask)
         # photo_cropped = crop_to_component(photo)
         # # rubberband(photo)
 
@@ -525,13 +598,14 @@ if __name__ == "__main__":
         # # test_result_dict["circumference"].append(circumference(photo))
         # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
         # test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
-        test_result_dict["aspect_ratio"].append(aspect_ratio)
+        # test_result_dict["aspect_ratio"].append(aspect_ratio)
+        test_result_dict["circle_coverage"].append(circle_coverage)
 
         # fft_test = frequency_domain_test(photo_cropped)
 
         # test_result_dict["fft_lines"].append(fft_test["fft_lines"])
 
-        # ##-- Other test data (for plotting) --##
+        ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
         photo_count += 1                                                                    # Update the total photo_count
         test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
@@ -540,6 +614,7 @@ if __name__ == "__main__":
         # Give output to the user on every 100 photos analyzed. This gives the user insight in the programs speed.
         if photo_count % 100 == 0:
             print("{} Current photo count: {}/{}".format(current_time(), photo_count, len(glob_filelist)))
+
 
 
     # Done processing
@@ -554,7 +629,8 @@ if __name__ == "__main__":
                                         #   "unique_colors": test_result_dict["unique_colors"],
                                         #   "fft_lines": test_result_dict["fft_lines"],
                                         #   "fill_factor": test_result_dict["fill_factor"],
-                                          "body_aspect_ratio": test_result_dict["aspect_ratio"]
+                                        #"body_aspect_ratio": test_result_dict["aspect_ratio"],
+                                          "circle_coverage": test_result_dict["circle_coverage"],
                                           }
                                   )
 
