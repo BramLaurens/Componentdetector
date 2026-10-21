@@ -50,98 +50,27 @@ def get_component_name(file_path: str):
 #   - This function includes the connection arms found on all electrical components TODO Fix this
 #   - After the laplacian function, a couple white "blobs" can be seen in the background, these are also counted in the total circumference count.
 def circumference(photo: cv.typing.MatLike):
-    # This function doesn't utelize color seen in the image
-    photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
+    diff = difference_from_empty(photo)
+    masked_photo = ((diff > 40).astype(np.uint8) * 255)
+    body = body_mask_diff(masked_photo, lead_width=6, min_area=300)
 
-    # Blur the photo with a kerkel size of 5x5.
-        # The "0" defines sigmaX to 0, which means the standard deviation in the X direction is 0.
-        # This results in an even blur
-    photo_blur = cv.GaussianBlur(photo_gray, (3,3), 0)
+    contours, _ = cv.findContours(body, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
-    # Apply OpenCV's laplacian formula to the photo. This function applies a laplacian Kernel, which measures (and highlights) a rapid changes in pixel intensity. 
-    photo_laplacian = cv.Laplacian(photo_blur, cv.CV_8U, ksize=5)
-    
-    # Apply a threshold to the laplacian of the photo to get only the 255.
-        # The cv.THRESH_BINARY, makes sure it is a standard threshold operation (pixel value > thresh? then pixel=white, else pixel=black)
-    ret, laplacian_thresh = cv.threshold(photo_laplacian, 254, 255, cv.THRESH_BINARY)
+    photo_contour = cv.drawContours(photo, contours, -1, (0, 0, 255), thickness=2)
 
+    if contours:
+        largest_contour = max(contours, key=cv.contourArea)
+    else:
+        return 0
 
-
-    ## TESTING ##
-
-    '''
-    lines = cv.HoughLinesP(
-                laplacian_thresh, 
-                rho=1, 
-                theta=np.pi/180, 
-                threshold=40, 
-                minLineLength=150,  # <-- Crucial parameter!
-                maxLineGap=60
-            )
-
-    output_hough = cv.cvtColor(laplacian_thresh, cv.COLOR_GRAY2BGR)
-
-    if lines is not None:
-        print(f"Found {len(lines)} line segments.")
-        for line in lines:
-            x1, y1, x2, y2 = line
-            cv.line(output_hough, (x1, y1), (x2, y2), (0, 0, 0), thickness=2)
-        
-    kernel_hough_open = np.ones((2,2),np.uint8)
-    hough_open_img = cv.morphologyEx(output_hough, cv.MORPH_OPEN, kernel_hough_open)
-
-    kernel_dilate = np.ones((25,25), np.uint8)
-    hough_dilate_img = cv.morphologyEx(hough_open_img, cv.MORPH_DILATE, kernel_dilate)
-
-    cv.imshow("test_hough", output_hough)
-    cv.imshow("test_open", hough_open_img)
-    cv.imshow("test_dilate", hough_dilate_img)
-
-    '''
-
-    
-    # kernel = np.ones((5,5),np.uint8)
-    # morph_close_img = cv.morphologyEx(laplacian_thresh, cv.MORPH_CLOSE, kernel)
-
-    # kernel2 = np.ones((3,3),np.uint8)
-    # morph_open_img = cv.morphologyEx(laplacian_thresh, cv.MORPH_OPEN, kernel2)
-    
-    # contours, hierarchy = cv.findContours(morph_open_img, mode = cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_NONE)
-    # photo_contours = np.copy(photo)
-
-    kernel = np.ones((21,21), np.uint8)
-    test1 = cv.morphologyEx(laplacian_thresh, cv.MORPH_CROSS, kernel)
-
-    # kernel2 = np.ones((7,7),np.uint8)
-    # test2 = cv.morphologyEx(laplacian_thresh, cv.MORPH_CLOSE, kernel2)
-
-
-    # cv.imshow("test1", test1)
-    # cv.imshow("test2", test2)
-    
-    
-
-    # Loop through each contour and assign a unique random BGR color
-    # for i, cnt in enumerate(contours):
-    #     color = np.random.randint(0, 256, size=3).tolist()  # Generates (B, G, R)
-    #     cv.drawContours(photo_contours, contours, i, color, 2)
-
-
-    # max_contour = max(contours, key=cv.contourArea)
-    # x,y,w,h = cv.boundingRect(max_contour)
-    # # draw the biggest contour (max_contour) in green
-    # cv.rectangle(photo_contours,(x,y),(x+w,y+h),(0,255,0),2)
-    
-    
-    
-
-    # Calculate the circumference by counting all the non zero pixels in the image.
-    #   This works since the above threshold function creates a strict black(255) white(0) picture.
-    circumference = cv.countNonZero(laplacian_thresh)
+    circumference = cv.arcLength(largest_contour, True)
 
 
     if ENABLE_VERBOSE:
-        print("Circumference: {}".format(circumference))
+
+        print("Circumference: ", circumference)
+        cv.imshow("masked photo", masked_photo)
+        cv.imshow("contours photo", photo_contour)
         cv.waitKey(0)
    
     return circumference
