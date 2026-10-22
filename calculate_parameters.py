@@ -264,7 +264,7 @@ def body_mask_diff_pipeline(img):
 
     #crop out the turntable edges
     h, w = fg.shape
-    fg = fg[0:h, 160:w-200]
+    # fg = fg[0:h, 160:w-200]
     # Calculate the body mask from the foreground mask using morphological operations
     body = body_mask_diff(fg, lead_width=10, min_area=300)
 
