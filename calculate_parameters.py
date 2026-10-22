@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt     # Matplotlib provides function to visualize 
 import pandas as pd                 # Pandas is used to store the collected paramterdata in an csv file, so it visualisation can happen without all calculations.
 
 
-ENABLE_VERBOSE = False
+ENABLE_VERBOSE = True
 CSV_NAME = "calculated_data.csv"
 
 
@@ -374,19 +374,34 @@ def body_aspect_ratio(body_mask: cv.typing.MatLike):
 
 # Find circles in the body mask using Hough Circle Transform, returns a list of circles
 def find_circles(body_mask: cv.typing.MatLike):
-    cv.GaussianBlur(body_mask, (9,9), 2)
-    circles = cv.HoughCircles(body_mask, cv.HOUGH_GRADIENT, dp=1, minDist=20, param1=50, param2=10, minRadius=5, maxRadius=0)
+    body_area = cv.countNonZero(body_mask)
+    if body_area == 0:
+        return np.empty((0, 3), dtype=np.uint32)
+    body_size = int(np.sqrt(body_area))  # Approximate size of the body, used to set min and max radius for HoughCircles, we take one side of the body
+
+
+    blurred_body = cv.GaussianBlur(body_mask, (9,9), 2)
+    circles = cv.HoughCircles(
+        blurred_body,
+        cv.HOUGH_GRADIENT,
+        dp=1,
+        minDist=max(1, body_size // 4),     # Circles must be some distance apart, atleast quarter of the body size, capped at 1 to prevent 0 inserts
+        param1=50,
+        param2=20,                          # Higher = stricter, fewer false circles
+        minRadius=max(5, body_size // 4),   # Radius must be atleast quarter of the body size, capped at 5 to prevent 0 inserts
+        maxRadius=body_size                 # No circles much larger than the body
+    )
 
     if circles is None:
         if ENABLE_VERBOSE:
             print("No circles found in body mask.")
         return np.empty((0, 3), dtype=np.uint32)
 
-    circles = np.around(circles).astype(np.uint32)
+    circles = np.around(circles).astype(np.int32).reshape(-1, 3)
 
     if ENABLE_VERBOSE:
         vis = cv.cvtColor(body_mask, cv.COLOR_GRAY2BGR)
-        for i in circles[0, :]:
+        for i in circles:
             cv.circle(vis,(i[0], i[1]), i[2], (0, 255, 0), 2)
             cv.circle(vis,(i[0], i[1]), 2, (0, 0, 255), 3)
         cv.imshow("Hough Circles", vis)
@@ -396,7 +411,10 @@ def find_circles(body_mask: cv.typing.MatLike):
 
 # Calculate how much o the total edge is covered by circles. Returns a coverageratio between 0 and 1.
 def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
-    EDGE_THICKNESS = 1
+    # How much the circle may be off edge to count
+    EDGE_TOLERANCE = 5
+    # How much of the circle msut be on edge to count
+    min_edge_percentage = 0.3
 
     if circles.size == 0:
         return 0.0
@@ -405,32 +423,46 @@ def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
     contours, _ = cv.findContours(body_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
     edge = np.zeros_like(body_mask)
     edge_overlap = np.zeros_like(body_mask)
-    cv.drawContours(edge, contours, -1, 255, EDGE_THICKNESS)
+
+    # Draw thin line of contours of edge
+    cv.drawContours(edge, contours, -1, 255, 1)
+
+    # Thick edge band used to check overlap
+    edge_band = np.zeros_like(body_mask)
+    cv.drawContours(edge_band, contours, -1, 255, EDGE_TOLERANCE)
 
     edge_pixels = cv.countNonZero(edge)
-
     if edge_pixels == 0:
         return 0.0
 
-    overlap_pixels = 0
+    covered = np.zeros_like(body_mask)
 
 
     # Loop through all circles and count how many pixels of the edge are covered by the circle. The coverage ratio is calculated as the number of edge pixels covered by the circle divided by the total number of edge pixels.
-    for cx, cy, r in circles[0, :]:
+    height, width = body_mask.shape[:2]
+    for cx, cy, r in circles:
+        cx, cy, r = int(cx), int(cy), int(r)
+        if not (0 <= cx < width and 0 <= cy < height):
+            continue
+
         if body_mask[cy, cx] == 0:
             continue
 
         # Create a circle image with the same size as the body mask, draw the circle on it
         circle_img = np.zeros_like(body_mask)
-        cv.circle(circle_img, (int(cx), int(cy)), int(r), 255, 1)
+        cv.circle(circle_img, (cx, cy), r, 255, 1)
 
-        # Calculate the overlap between the edge and the circle
-        overlap = cv.bitwise_and(edge, circle_img)
-        # Add overlap to the edge_overlap image for visualization
-        edge_overlap = cv.bitwise_or(edge_overlap, overlap)
-        overlap_pixels += cv.countNonZero(overlap)
+        # Check how much % of the circle is actually on the edge, if less than min_edge_percentage, skip this circle
+        circle_pixels = cv.countNonZero(circle_img)
+        on_edge = cv.countNonZero(cv.bitwise_and(circle_img, edge_band))
+        if circle_pixels == 0 or on_edge / circle_pixels < min_edge_percentage:
+                continue
 
-    coverage_ratio = overlap_pixels / edge_pixels
+        # If accepted, add the circle to the covered image with thickness of EDGE_TOLERANCE, so that the edge is covered by the circle
+        cv.circle(covered, (cx, cy), r, 255, EDGE_TOLERANCE)
+
+    edge_overlap = cv.bitwise_and(covered, edge)
+    coverage_ratio = cv.countNonZero(edge_overlap) / edge_pixels
 
     if ENABLE_VERBOSE:
         print("Circle edge coverage: {:.2f}%".format(coverage_ratio *100))
