@@ -57,10 +57,27 @@ if __name__ == "__main__":
     # ff_plot.tick_params(axis='y', labelsize=PLT_FONT_SIZE)   
 
     ### ---- Body Aspect Rastio ---- ###
-    plt.figure("Body Aspect Ratio Per Component", figsize=(16, 9 ), layout="constrained")
-    plt.title("Body Aspect Ratio Per Component")
-    ba_plot = sns.boxplot(x="component_name", y="body_aspect_ratio",
-                                       data=calculated_parameters)
+    # plt.figure("Body Aspect Ratio Per Component", figsize=(16, 9 ), layout="constrained")
+    # plt.title("Body Aspect Ratio Per Component")
+    # ba_plot = sns.boxplot(x="component_name", y="body_aspect_ratio",
+    #                                    data=calculated_parameters)
+
+
+    ### ---- Body Aspect Rastio ---- ###
+    plt.figure("H mean per Component", figsize=(16, 9 ), layout="constrained")
+    plt.title("H mean per Component")
+    hs_plot = sns.boxplot(x="component_name", y="v_mean",
+                                           data=calculated_parameters)
+    
+    plt.figure("S mean per Component", figsize=(16, 9 ), layout="constrained")
+    plt.title("S mean per Component")
+    hs_plot = sns.boxplot(x="component_name", y="s_mean",
+                                           data=calculated_parameters)
+    
+    plt.figure("VS ratio per Component", figsize=(16, 9 ), layout="constrained")
+    plt.title("VS Ratio per Component")
+    hs_plot = sns.boxplot(x="component_name", y="vs_ratio",
+                                           data=calculated_parameters)
 
 
     #### ---- Fill factor ---- ####

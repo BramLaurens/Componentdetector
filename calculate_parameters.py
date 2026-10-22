@@ -408,6 +408,21 @@ def calculate_fill_factor(photo: cv.typing.MatLike):
 
     return fill_factor
 
+# def average_VL(photo: cv.typing.MatLike):
+#     photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV_FULL)
+#     h, s, v = cv.split(photo_HSV)
+#     avg_v = np.mean(v)
+#     avg_s = np.mean(s)
+#     vs_ratio = avg_v / avg_s if avg_s != 0 else 0
+#     return vs_ratio
+
+def average_VS(photo: cv.typing.MatLike):
+    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV_FULL)
+    h, s, v = cv.split(photo_HSV)
+    avg_v = np.mean(v)
+    avg_s = np.mean(s)
+    return [avg_v, avg_s, avg_v / avg_s if avg_s != 0 else 0]
+
 # Main program
 if __name__ == "__main__":
 
@@ -422,6 +437,9 @@ if __name__ == "__main__":
     test_result_dict["fft_opp"] = []
     test_result_dict["fill_factor"] = []
     test_result_dict["aspect_ratio"] = []
+    test_result_dict["v_mean"] = []
+    test_result_dict["s_mean"] = []
+    test_result_dict["vs_ratio"] = []
 
     # Grab filapaths for all photos going to be processed
     glob_filelist = glob.glob(TESTPHOTO_PATH + "/*.jpg")
@@ -454,7 +472,12 @@ if __name__ == "__main__":
         # # test_result_dict["circumference"].append(circumference(photo))
         # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
         # test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
-        test_result_dict["aspect_ratio"].append(aspect_ratio)
+        # test_result_dict["aspect_ratio"].append(aspect_ratio)
+        image_masked = cv.bitwise_and(photo, photo, mask=body_mask)
+        
+        test_result_dict["v_mean"].append(average_VS(image_masked)[0])
+        test_result_dict["s_mean"].append(average_VS(image_masked)[1])
+        test_result_dict["vs_ratio"].append(average_VS(image_masked)[2])
 
         # fft_test = frequency_domain_test(photo_cropped)
 
@@ -483,7 +506,10 @@ if __name__ == "__main__":
                                         #   "unique_colors": test_result_dict["unique_colors"],
                                         #   "fft_lines": test_result_dict["fft_lines"],
                                         #   "fill_factor": test_result_dict["fill_factor"],
-                                          "body_aspect_ratio": test_result_dict["aspect_ratio"]
+                                        #   "body_aspect_ratio": test_result_dict["aspect_ratio"]
+                                            "v_mean": test_result_dict["v_mean"],
+                                            "s_mean": test_result_dict["s_mean"],
+                                            "vs_ratio": test_result_dict["vs_ratio"]
                                           }
                                   )
 
