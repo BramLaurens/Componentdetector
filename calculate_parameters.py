@@ -404,10 +404,10 @@ def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
 
 
 
-def frequency_domain_test(photo: cv.typing.MatLike):
+def fft_lines(photo: cv.typing.MatLike):
     photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
 
-    # 1. Grayscale FFT
+    # Peform FFT and shift so it's centered.
     photo_fft = np.fft.fft2(photo_gray)
     photo_fft_shift = np.fft.fftshift(photo_fft)
 
@@ -418,10 +418,6 @@ def frequency_domain_test(photo: cv.typing.MatLike):
 
     ret, magnitude_thresh = cv.threshold(magnitude_gray, 150, 255, cv.THRESH_BINARY)
 
-    # fft_BGR = cv.cvtColor(magnitude_thresh, cv.COLOR_GRAY2BGR)
-
-
-
     lines = cv.HoughLinesP(
         magnitude_thresh, 
         rho=1, 
@@ -430,7 +426,6 @@ def frequency_domain_test(photo: cv.typing.MatLike):
         minLineLength=30, 
         maxLineGap=40
     )
-
 
     if ENABLE_VERBOSE:
 
@@ -467,17 +462,7 @@ def frequency_domain_test(photo: cv.typing.MatLike):
     else:
         total_lines = 0
 
-    fft_opp = 0
-    opp = cv.countNonZero(magnitude_thresh)
-    if opp is not None:
-        fft_opp = opp
-    else:
-        fft_opp = 0
-
-    return {
-        "fft_lines": total_lines,
-        "fft_opp": fft_opp
-        }
+    return total_lines
 
 def calculate_fill_factor(photo: cv.typing.MatLike):
     diff = difference_from_empty(photo)
@@ -521,7 +506,6 @@ if __name__ == "__main__":
     test_result_dict["IC_pincount"] = []
     test_result_dict["unique_colors"] = []
     test_result_dict["fft_lines"] = []
-    test_result_dict["fft_opp"] = []
     test_result_dict["fill_factor"] = []
     test_result_dict["aspect_ratio"] = []
     test_result_dict["circle_coverage"] = []
@@ -561,15 +545,12 @@ if __name__ == "__main__":
         # test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
         # test_result_dict["aspect_ratio"].append(aspect_ratio)
         test_result_dict["circle_coverage"].append(circle_coverage)
-
-        # fft_test = frequency_domain_test(photo_cropped)
-
-        # test_result_dict["fft_lines"].append(fft_test["fft_lines"])
+        test_result_dict["fft_lines"].append(fft_lines(photo_cropped))
 
         ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
         photo_count += 1                                                                    # Update the total photo_count
-        test_result_dict["component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
+        test_result_dict["component_name"].append(get_component_name(file_path))            # Save the current component name in the same list position as the test results
 
 
         # Give output to the user on every 100 photos analyzed. This gives the user insight in the programs speed.
