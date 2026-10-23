@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt     # Matplotlib provides function to visualize 
 import pandas as pd                 # Pandas is used to store the collected paramterdata in an csv file, so it visualisation can happen without all calculations.
 
 
-ENABLE_VERBOSE = True
+ENABLE_VERBOSE = False
 CSV_NAME = "calculated_data.csv"
 
 
@@ -74,44 +74,6 @@ def circumference(photo: cv.typing.MatLike):
         cv.waitKey(0)
    
     return circumference
-
-
-
-def IC_pincount(photo: cv.typing.MatLike):
-    CONTOUR_AREA_THRESH = 30            # This value was found to work best by trial and error, with a value of 50, the upright dip's pins get detected, but the upside down dips don't
-    contour_count = 0
-
-    # Create filter
-    # (Filter values found by trial and error, optimizzed on DIP_8 pins)
-    low_gray = np.array([50, 130, 220])
-    high_gray = np.array([255, 255, 255])
-
-    # Create mask from photo 
-    mask = cv.inRange(photo, low_gray, high_gray)
-
-    # Find contours in photo in order to count them
-    contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
-
-    # Count all "Valid" contours. A "Valid" contour has a minimum area of CONTOUR_AREA_THRESH
-    for i in range(len(contours)):
-        if cv.contourArea(contours[i]) >= CONTOUR_AREA_THRESH:
-            contour_count += 1
-
-    # Optional output
-    if ENABLE_VERBOSE:
-        print("Valid Contours found: ", contour_count)
-        contours_img = np.copy(photo)
-        contours_img = cv.drawContours(contours_img, contours, -1, (0, 0, 255), thickness=2)
-
-        cv.imshow("Original image", photo)
-        cv.imshow("Mask", mask)
-        cv.imshow("Contours", contours_img)
-
-        cv.waitKey(0)
-
-    # Return value
-    return contour_count
-
 
 
 def count_unique_colors(photo: cv.typing.MatLike):
@@ -401,9 +363,6 @@ def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
     return coverage_ratio
 
 
-
-
-
 def fft_lines(photo: cv.typing.MatLike):
     photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
 
@@ -495,15 +454,13 @@ def calculate_fill_factor(photo: cv.typing.MatLike):
 
     return fill_factor
 
+
 # Main program
 if __name__ == "__main__":
-
-
     ##-- Processing --##
     # Create the necessary lists in the test_result_dict, every test needs a list.
     # In this list the quantified result of each test is saved.
     test_result_dict["circumference"] = []
-    test_result_dict["IC_pincount"] = []
     test_result_dict["unique_colors"] = []
     test_result_dict["fft_lines"] = []
     test_result_dict["fill_factor"] = []
@@ -533,17 +490,14 @@ if __name__ == "__main__":
         body_mask = body_mask_diff_pipeline(photo)
         circles = find_circles(body_mask)
         circle_coverage = circle_edge_coverage(body_mask, circles)
-        # aspect_ratio = body_aspect_ratio(body_mask)
-        # photo_cropped = crop_to_component(photo)
-        # # rubberband(photo)
+        aspect_ratio = body_aspect_ratio(body_mask)
+        photo_cropped = crop_to_component(photo)
 
-        # ##-- Parameter functions --##
-        # # test_result_dict["circumference"].append(circumference(photo))
-        # # test_result_dict["IC_pincount"].append(IC_pincount(photo))
-        # # test_result_dict["circumference"].append(circumference(photo))
-        # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
-        # test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
-        # test_result_dict["aspect_ratio"].append(aspect_ratio)
+        ##-- Parameter functions --##
+        test_result_dict["circumference"].append(circumference(photo))
+        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
+        test_result_dict["aspect_ratio"].append(aspect_ratio)
         test_result_dict["circle_coverage"].append(circle_coverage)
         test_result_dict["fft_lines"].append(fft_lines(photo_cropped))
 
