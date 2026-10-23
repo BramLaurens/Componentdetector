@@ -29,7 +29,7 @@ EMPTYREFERENCE_PATH = "emptyphotos/empty_reference.jpg"  # Path where the empty 
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
-    "photo_component_name"  : []
+    "component_name"  : []
 }
 
 
@@ -569,32 +569,34 @@ if __name__ == "__main__":
         ##-- Other test data (for plotting) --##
         test_result_dict["photo_number"].append(photo_count)                                # Save the current photo count in the same list position as the test results
         photo_count += 1                                                                    # Update the total photo_count
-        test_result_dict["photo_component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
+        test_result_dict["component_name"].append(get_component_name(file_path))      # Save the current component name in the same list position as the test results
 
 
         # Give output to the user on every 100 photos analyzed. This gives the user insight in the programs speed.
         if photo_count % 100 == 0:
             print("{} Current photo count: {}/{}".format(current_time(), photo_count, len(glob_filelist)))
 
-
+    if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
 
     # Done processing
     print("{} - Done calculating. Total photos tested: {}".format(current_time(), photo_count))
+    print("{} - Saving results to csv file: {}".format(current_time(), CSV_NAME))
 
-    if ENABLE_VERBOSE: cv.destroyAllWindows()           # Sometimes the last window gets left behind, destroy all windows
+    # Check if there is an empty list in test_result_dict, if so, remove it.
+    empty_keys = []
+    for key, value in test_result_dict.items():
+        if len(value) == 0:
+            print("WARN: No data found for key: {}, removing from test_result_dict".format(key))
+            empty_keys.append(key)
 
-    calculated_data = pd.DataFrame(data = {"photo_num": test_result_dict["photo_number"],
-                                          "component_name": test_result_dict["photo_component_name"],
-                                        #   "circumference": test_result_dict["circumference"],
-                                        #   "IC_pincount": test_result_dict["IC_pincount"],
-                                        #   "unique_colors": test_result_dict["unique_colors"],
-                                        #   "fft_lines": test_result_dict["fft_lines"],
-                                        #   "fill_factor": test_result_dict["fill_factor"],
-                                        #"body_aspect_ratio": test_result_dict["aspect_ratio"],
-                                          "circle_coverage": test_result_dict["circle_coverage"],
-                                          }
-                                  )
+    # This is needed since we can't change test_result_dict's size during a .items() loop.
+    for i in empty_keys:
+        del test_result_dict[i]
+
+    calculated_data = pd.DataFrame(data = test_result_dict)
+
+
 
     calculated_data.to_csv(CSV_NAME, index=False)
 
-    print("Saved values to csv file: {}, exiting.".format(CSV_NAME))
+    print("{} - Done saving values to csv file: {}, exiting.".format(current_time(), CSV_NAME))
