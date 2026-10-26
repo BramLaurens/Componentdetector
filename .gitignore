@@ -1,5 +1,6 @@
 /.vscode
 /photos
+/__pycache__
 
 # Don't exclude test_photos
 !/photos/test_photos
