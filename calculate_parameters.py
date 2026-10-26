@@ -451,28 +451,29 @@ def calculate_fill_factor(masked_component: cv.typing.MatLike):
 
 # Function to call in live_demo.py
 def calculate_parameters(photo: cv.typing.MatLike):
-    return_list = []
     ##-- Pre processing --##
-    # Crop out the turntable edges
     h, w, c = photo.shape
-    photo = photo[0:h, 160:w-200]
 
     # Mask the component from the background. This is done here to allow all functions to access component and body mask.
     component_diff_from_empty = difference_from_empty(photo)
     component_binary_mask = fg = ((component_diff_from_empty > 40).astype(np.uint8) * 255)
     component_binary_mask = component_binary_mask[0:h, 160:w-200]
     body_mask =  body_mask_diff(component_binary_mask, lead_width=10, min_area=300)
+
     photo_cropped = crop_to_component(photo)
 
     ##-- Parameter functions --##
-    return_list.append(circumference(body_mask))
-    return_list.append(count_unique_colors(photo_cropped))
-    return_list.append(calculate_fill_factor(component_binary_mask))
-    return_list.append(body_aspect_ratio(body_mask))
-    return_list.append(circle_edge_coverage(body_mask, find_circles(body_mask)))
-    return_list.append(fft_lines(photo_cropped))
+    return_dict = {
+        "circumference": [circumference(body_mask)],
+        "unique_colors": [count_unique_colors(photo_cropped)],
+        "fft_lines": [fft_lines(photo_cropped)],
+        "fill_factor": [calculate_fill_factor(component_binary_mask)],
+        "aspect_ratio": [body_aspect_ratio(body_mask)],
+        "circle_coverage": [circle_edge_coverage(body_mask, find_circles(body_mask))]
+    }
 
-    return return_list
+    return pd.DataFrame(data = return_dict)
+    
 
 
 # Main program
