@@ -26,6 +26,9 @@ TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"               # Pat
 EMPTYPHOTO_PATH = "emptyphotos"
 EMPTYREFERENCE_PATH = "emptyphotos/empty_reference.jpg"  # Path where the empty reference photo is found. This photo is used to subtract the turntable from the image, so only the component remains.
 
+# Module level variables for use in live demo
+last_fft_image = None
+
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
@@ -440,6 +443,17 @@ def fft_lines(photo: cv.typing.MatLike):
         total_lines = len(lines)
     else:
         total_lines = 0
+
+    # Store the last FFT image for use in live_demo.py
+    global last_fft_image
+    # Convert magnitude_gray to BGR for visualization, so that the lines can be drawn in color
+    fft_display = cv.cvtColor(magnitude_gray, cv.COLOR_GRAY2BGR)
+    if lines is not None:
+        for line in lines:
+            x1, y1, x2, y2 = line.ravel()
+            cv.line(fft_display, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    last_fft_image = fft_display
+
 
     return total_lines
 

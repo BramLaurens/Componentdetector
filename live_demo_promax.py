@@ -8,6 +8,7 @@ from datetime import datetime
 
 import customtkinter as ctk
 import cv2 as cv
+import numpy as np
 import pandas as pd
 from PIL import Image
 from sklearn.ensemble import RandomForestClassifier
@@ -17,6 +18,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from calculate_parameters import calculate_parameters
+import calculate_parameters as cp   # module itself, to read the live last_* debug images
 
 DEFAULT_STREAM_URL = "rtsp://192.168.4.1/mjpeg/1"
 DEFAULT_DATA_PATH = "calculated_data.csv"
@@ -172,6 +174,138 @@ class ConfusionMatrixWindow(ctk.CTkToplevel):
                               text_color="#66bb6a")
 
 
+def collect_debug_frames():
+    """Every module variable in calculate_parameters.py named last_* that holds an image.
+    Add e.g. `last_threshold_image = ...` there and it shows up in the Live frames window."""
+    return {name: value for name, value in vars(cp).items()
+            if name.startswith("last_") and isinstance(value, np.ndarray) and value.ndim in (2, 3)}
+
+
+class LiveFramesWindow(ctk.CTkToplevel):
+    """Separate window that shows the intermediate images from calculate_parameters.py live.
+    One tile per last_* image, laid out in a grid of COLUMNS wide."""
+
+    COLUMNS = 2
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title("Live frames - calculate_parameters")
+        self.geometry("1000x600")
+        self.minsize(500, 350)
+
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self.grid_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.grid_frame.grid(row=0, column=0, sticky="nsew", padx=15, pady=15)
+
+        self.placeholder = ctk.CTkLabel(self.grid_frame,
+                                        text="No frames yet - connect to the stream.\n"
+                                             "Images come from last_* variables in calculate_parameters.py",
+                                        text_color="gray60", font=ctk.CTkFont(size=15))
+        self.placeholder.pack(expand=True)
+
+        self.tiles = {}            # name -> (box frame, image label)
+        self.after(150, self._bring_to_front)
+        self.after(GUI_REFRESH_MS, self.update_frames)
+
+    def _bring_to_front(self):
+        self.lift()
+        self.focus_force()
+
+    def _build_tiles(self, names):
+        # (Re)build the grid when the set of images changes
+        for child in self.grid_frame.winfo_children():
+            child.destroy()
+        self.tiles = {}
+        self.tile_sizes = {}       # name -> last image size, only resize when it really changes
+        rows = (len(names) + self.COLUMNS - 1) // self.COLUMNS
+        cols = min(self.COLUMNS, len(names))
+        # Reset any rows/columns from a previous layout first
+        old_rows, old_cols = getattr(self, "grid_rows", 0), getattr(self, "grid_cols", 0)
+        for c in range(max(self.COLUMNS, old_cols)):
+            self.grid_frame.grid_columnconfigure(c, weight=0, uniform="")
+        for r in range(old_rows):
+            self.grid_frame.grid_rowconfigure(r, weight=0, uniform="")
+
+        # Only the columns/rows that actually hold a tile share the space equally.
+        # (An empty column in the same uniform group would claim equal width and squeeze the tiles.)
+        self.grid_rows, self.grid_cols = rows, cols
+        for c in range(cols):
+            self.grid_frame.grid_columnconfigure(c, weight=1, uniform="tile_col")
+        for r in range(rows):
+            self.grid_frame.grid_rowconfigure(r, weight=1, uniform="tile_row")
+
+        for i, name in enumerate(names):
+            r, c = divmod(i, self.COLUMNS)
+            box = ctk.CTkFrame(self.grid_frame, corner_radius=12, border_width=2)
+            box.grid(row=r, column=c, sticky="nsew", padx=5, pady=5)
+            box.grid_columnconfigure(0, weight=1)
+            box.grid_rowconfigure(1, weight=1)
+            # "last_fft_image" -> "fft image"
+            title = name.removeprefix("last_").replace("_", " ")
+            title_label = ctk.CTkLabel(box, text=title, font=ctk.CTkFont(size=14, weight="bold"))
+            title_label.grid(row=0, column=0, sticky="w", padx=12, pady=(8, 0))
+            image_label = ctk.CTkLabel(box, text="")
+            image_label.grid(row=1, column=0, sticky="nsew", padx=6, pady=6)
+            self.tiles[name] = (title_label, image_label)
+
+    def _cell_size(self, title_label):
+        """Space available for an image, measured from the grid area (fixed by the window size),
+        NOT from the tile itself. Measuring the tile caused a feedback loop: image grows the tile,
+        tile measures bigger, image grows again... = jumping."""
+        scaling = self.grid_frame._get_widget_scaling()
+        area_w = self.grid_frame.winfo_width() / scaling
+        area_h = self.grid_frame.winfo_height() / scaling
+        title_h = title_label.winfo_height() / scaling + 8      # title + its top padding
+        # per cell: minus tile padding (2*5), border + label padding (~2*10), safety margin
+        cell_w = area_w / self.grid_cols - 10 - 20 - 4
+        cell_h = area_h / self.grid_rows - 10 - 20 - 4 - title_h
+        return max(cell_w, 50), max(cell_h, 50)
+
+    def update_frames(self):
+        if not self.winfo_exists():
+            return
+
+        with self.app.frame_lock:
+            frames = self.app.latest_debug_frames
+
+        if frames:
+            if list(frames) != list(self.tiles):
+                self._build_tiles(list(frames))
+
+            for name, img in frames.items():
+                title_label, label = self.tiles[name]
+                # Make it uint8 first (cvtColor can't handle bool/float64 images)
+                if img.dtype == bool:              # masks: True -> white
+                    img = img.astype(np.uint8) * 255
+                elif img.dtype != np.uint8:        # float/int images: stretch to 0-255
+                    img = cv.normalize(img, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
+                # Convert to RGB for PIL: grayscale -> RGB, BGR (OpenCV) -> RGB
+                if img.ndim == 2:
+                    rgb = cv.cvtColor(img, cv.COLOR_GRAY2RGB)
+                else:
+                    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+
+                # Fit inside the grid cell (same DPI-scaling fix as the main live view)
+                cell_w, cell_h = self._cell_size(title_label)
+                fh, fw = rgb.shape[:2]
+                scale = min(cell_w / fw, cell_h / fh)
+                size = (max(1, int(fw * scale)), max(1, int(fh * scale)))
+                # Ignore tiny (1-2 px) measurement wiggles, keep the previous size
+                prev = self.tile_sizes.get(name)
+                if prev and abs(prev[0] - size[0]) <= 2 and abs(prev[1] - size[1]) <= 2:
+                    size = prev
+                self.tile_sizes[name] = size
+
+                ctk_img = ctk.CTkImage(light_image=Image.fromarray(rgb), size=size)
+                label.configure(image=ctk_img)
+                label.image = ctk_img          # keep a reference
+
+        self.after(GUI_REFRESH_MS, self.update_frames)
+
+
 class RecognitionApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -193,6 +327,8 @@ class RecognitionApp(ctk.CTk):
         self.fps = 0.0
         self.cm_window = None             # confusion matrix window (only one at a time)
         self.latest_params = None         # dict {column: value} from calculate_parameters
+        self.latest_debug_frames = {}     # {name: image} last_* images from calculate_parameters.py
+        self.frames_window = None         # live frames window (only one at a time)
 
         self._build_layout()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -256,11 +392,16 @@ class RecognitionApp(ctk.CTk):
 
         self.stream_status = ctk.CTkLabel(side, text="Stream: disconnected",
                                           text_color="gray70", anchor="w")
-        self.stream_status.grid(row=11, column=0, padx=20, pady=(0, 20), sticky="ew")
+        self.stream_status.grid(row=11, column=0, padx=20, pady=(0, 6), sticky="ew")
+
+        self.frames_btn = ctk.CTkButton(side, text="Live frames", width=240,
+                                        fg_color="transparent", border_width=1,
+                                        command=self.open_live_frames)
+        self.frames_btn.grid(row=12, column=0, padx=20, pady=(0, 20))
 
         # Prediction readout
         pred_box = ctk.CTkFrame(side)
-        pred_box.grid(row=12, column=0, padx=20, pady=(0, 10), sticky="ew")
+        pred_box.grid(row=13, column=0, padx=20, pady=(0, 10), sticky="ew")
         ctk.CTkLabel(pred_box, text="Predicted component").pack(pady=(8, 0))
         self.pred_label = ctk.CTkLabel(pred_box, text="-",
                                        font=ctk.CTkFont(size=24, weight="bold"))
@@ -405,6 +546,14 @@ class RecognitionApp(ctk.CTk):
             return
         self.cm_window = ConfusionMatrixWindow(self)
 
+    def open_live_frames(self):
+        # Reuse the window if it's already open, otherwise create a new one
+        if self.frames_window is not None and self.frames_window.winfo_exists():
+            self.frames_window.lift()
+            self.frames_window.focus_force()
+            return
+        self.frames_window = LiveFramesWindow(self)
+
 
 
     # ---------------------------------------------------------------- stream
@@ -433,6 +582,7 @@ class RecognitionApp(ctk.CTk):
         with self.frame_lock:
             self.latest_frame = None
             self.latest_params = None
+            self.latest_debug_frames = {}
         self.clear_params_panel()
         self.video_label.configure(image=None, text="No stream connected")
         try:
@@ -483,9 +633,12 @@ class RecognitionApp(ctk.CTk):
                 # Calculate the params every frame (also without a model) so the panel stays live
                 params = None
                 params_dict = None
+                debug_frames = {}
                 try:
                     params = calculate_parameters(frame)
                     params_dict = params.iloc[0].to_dict()      # first (only) row -> {column: value}
+                    # Grab the last_* images right away, so they belong to this frame
+                    debug_frames = collect_debug_frames()
                 except Exception as e:
                     label = "error"
                     if str(e) != last_error:                    # don't spam the log every frame
@@ -518,6 +671,7 @@ class RecognitionApp(ctk.CTk):
                     self.latest_frame = rgb
                     self.latest_prediction = label
                     self.latest_params = params_dict
+                    self.latest_debug_frames = debug_frames
                     self.fps = 0.9 * self.fps + 0.1 * fps
         finally:
             cap.release()
