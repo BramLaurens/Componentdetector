@@ -27,21 +27,11 @@ def benchmark_models():
 
     print(f"Dataset loaded successfully with {len(df)} rows.\n")
 
-    # 2. Balanced Validation Split (Same principle as before)
-    val_indices = []
-    for class_name, group in df.groupby(TARGET_COLUMN):
-        n_samples = min(VAL_SAMPLES_PER_CLASS, len(group))
-        sampled_group = group.sample(n=n_samples, random_state=42)
-        val_indices.extend(sampled_group.index)
+    x = df.drop(columns=['photo_number', 'component_name'])
+    y = df['component_name']
 
-    df_val = df.loc[val_indices]
-    df_train = df.drop(val_indices)
-
-    X_train = df_train.drop(columns=DROP_COLUMNS)
-    y_train = df_train[TARGET_COLUMN]
-    X_val = df_val.drop(columns=DROP_COLUMNS)
-    y_val = df_val[TARGET_COLUMN]
-
+    from sklearn.model_selection import train_test_split
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
     # 3. Define the models to benchmark
     # Note: Models sensitive to feature scales (KNN, Logistic Regression, SVM) use a Pipeline with StandardScaler.
     # Tree-based models (Decision Tree, Random Forest, Gradient Boosting) don't require scaling.
@@ -72,13 +62,13 @@ def benchmark_models():
     for name, model in models.items():
         # Measure training time
         start_time = time.time()
-        model.fit(X_train, y_train)
+        model.fit(x_train, y_train)
         train_time = time.time() - start_time
 
         # Predict and evaluate
-        y_pred = model.predict(X_val)
-        acc = accuracy_score(y_val, y_pred)
-        f1 = f1_score(y_val, y_pred, average='weighted')
+        y_pred = model.predict(x_test)
+        acc = accuracy_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred, average='weighted')
 
         results.append({
             "Model": name,
