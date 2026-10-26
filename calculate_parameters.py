@@ -49,14 +49,8 @@ def get_component_name(file_path: str):
 # Known limitations:
 #   - This function includes the connection arms found on all electrical components TODO Fix this
 #   - After the laplacian function, a couple white "blobs" can be seen in the background, these are also counted in the total circumference count.
-def circumference(photo: cv.typing.MatLike):
-    diff = difference_from_empty(photo)
-    masked_photo = ((diff > 40).astype(np.uint8) * 255)
-    body = body_mask_diff(masked_photo, lead_width=6, min_area=300)
-
-    contours, _ = cv.findContours(body, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
-
-    photo_contour = cv.drawContours(photo, contours, -1, (0, 0, 255), thickness=2)
+def circumference(photo_body: cv.typing.MatLike):
+    contours, _ = cv.findContours(photo_body, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
     if contours:
         largest_contour = max(contours, key=cv.contourArea)
@@ -65,11 +59,11 @@ def circumference(photo: cv.typing.MatLike):
 
     circumference = cv.arcLength(largest_contour, True)
 
-
     if ENABLE_VERBOSE:
-
         print("Circumference: ", circumference)
-        cv.imshow("masked photo", masked_photo)
+
+        photo_contour = cv.drawContours(photo_body, contours, -1, (0, 0, 255), thickness=2)
+        cv.imshow("masked photo", photo_body)
         cv.imshow("contours photo", photo_contour)
         cv.waitKey(0)
    
@@ -423,24 +417,21 @@ def fft_lines(photo: cv.typing.MatLike):
 
     return total_lines
 
-def calculate_fill_factor(photo: cv.typing.MatLike):
-    diff = difference_from_empty(photo)
-    masked_photo = ((diff > 40).astype(np.uint8) * 255)
+def calculate_fill_factor(masked_component: cv.typing.MatLike):
+    points = cv.findNonZero(masked_component)           # Find non zero points and saave the coordinates of those.
+    convex_hull = cv.convexHull(points)                 # Calculate the convex hull around those points
 
-    points = cv.findNonZero(masked_photo)       # Find non zero points and saave the coordinates of those.
-    convex_hull = cv.convexHull(points)         # Calculate the convex hull around those points
-
-    mask_area = cv.countNonZero(masked_photo)           # Calculate the area of the mask
+    mask_area = cv.countNonZero(masked_component)       # Calculate the area of the mask
     convex_hull_area = cv.contourArea(convex_hull)      # Calculate the area of the convex hull
 
-    if mask_area == 0:
+    if convex_hull_area == 0:
         fill_factor = 0     # prevent DIV0 error
     else:
         fill_factor =  mask_area / convex_hull_area
 
 
     if ENABLE_VERBOSE:
-        masked_photo_copy = cv.cvtColor(masked_photo, cv.COLOR_GRAY2BGR)
+        masked_photo_copy = cv.cvtColor(masked_component, cv.COLOR_GRAY2BGR)
         cv.drawContours(masked_photo_copy, [convex_hull], 0, (0, 0, 255), 2)
         print("mask area: \t\t\t{}".format(mask_area))
         print("Convex hull area: \t{}".format(convex_hull_area))
@@ -448,7 +439,7 @@ def calculate_fill_factor(photo: cv.typing.MatLike):
 
         # cv.imshow("Original", photo)
         # cv.imshow("Difference", np.clip(diff*4, 0, 255).astype(np.uint8))
-        cv.imshow("fg", masked_photo)
+        cv.imshow("fg", masked_component)
         cv.imshow("convex_hull", masked_photo_copy)
         cv.waitKey(0)
 
@@ -487,18 +478,21 @@ if __name__ == "__main__":
         # Crop out the turntable edges
         h, w, c = photo.shape
         photo = photo[0:h, 160:w-200]
-        body_mask = body_mask_diff_pipeline(photo)
-        circles = find_circles(body_mask)
-        circle_coverage = circle_edge_coverage(body_mask, circles)
-        aspect_ratio = body_aspect_ratio(body_mask)
+
+        # Mask the component from the background. This is done here to allow all functions to access component and body mask.
+        component_diff_from_empty = difference_from_empty(photo)
+        component_binary_mask = fg = ((component_diff_from_empty > 40).astype(np.uint8) * 255)
+        component_binary_mask = component_binary_mask[0:h, 160:w-200]
+        body_mask =  body_mask_diff(component_binary_mask, lead_width=10, min_area=300)
+
         photo_cropped = crop_to_component(photo)
 
         ##-- Parameter functions --##
-        test_result_dict["circumference"].append(circumference(photo))
+        test_result_dict["circumference"].append(circumference(body_mask))
         test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
-        test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
-        test_result_dict["aspect_ratio"].append(aspect_ratio)
-        test_result_dict["circle_coverage"].append(circle_coverage)
+        test_result_dict["fill_factor"].append(calculate_fill_factor(component_binary_mask))
+        test_result_dict["aspect_ratio"].append(body_aspect_ratio(body_mask))
+        test_result_dict["circle_coverage"].append(circle_edge_coverage(body_mask, find_circles(body_mask)))
         test_result_dict["fft_lines"].append(fft_lines(photo_cropped))
 
         ##-- Other test data (for plotting) --##
