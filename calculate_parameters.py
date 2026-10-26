@@ -417,8 +417,11 @@ def fft_lines(photo: cv.typing.MatLike):
 
     return total_lines
 
+
 def calculate_fill_factor(masked_component: cv.typing.MatLike):
     points = cv.findNonZero(masked_component)           # Find non zero points and saave the coordinates of those.
+    if points is None:
+        return 0
     convex_hull = cv.convexHull(points)                 # Calculate the convex hull around those points
 
     mask_area = cv.countNonZero(masked_component)       # Calculate the area of the mask
@@ -444,6 +447,32 @@ def calculate_fill_factor(masked_component: cv.typing.MatLike):
         cv.waitKey(0)
 
     return fill_factor
+
+
+# Function to call in live_demo.py
+def calculate_parameters(photo: cv.typing.MatLike):
+    return_list = []
+    ##-- Pre processing --##
+    # Crop out the turntable edges
+    h, w, c = photo.shape
+    photo = photo[0:h, 160:w-200]
+
+    # Mask the component from the background. This is done here to allow all functions to access component and body mask.
+    component_diff_from_empty = difference_from_empty(photo)
+    component_binary_mask = fg = ((component_diff_from_empty > 40).astype(np.uint8) * 255)
+    component_binary_mask = component_binary_mask[0:h, 160:w-200]
+    body_mask =  body_mask_diff(component_binary_mask, lead_width=10, min_area=300)
+    photo_cropped = crop_to_component(photo)
+
+    ##-- Parameter functions --##
+    return_list.append(circumference(body_mask))
+    return_list.append(count_unique_colors(photo_cropped))
+    return_list.append(calculate_fill_factor(component_binary_mask))
+    return_list.append(body_aspect_ratio(body_mask))
+    return_list.append(circle_edge_coverage(body_mask, find_circles(body_mask)))
+    return_list.append(fft_lines(photo_cropped))
+
+    return return_list
 
 
 # Main program
