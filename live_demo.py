@@ -9,6 +9,7 @@ DATA_PATH = "calculated_data.csv"
 RANDOM_STATE = 42
 
 
+# Initialize RF classifier with default params
 random_forest = skl.ensemble.RandomForestClassifier(random_state=RANDOM_STATE, n_estimators=100, max_depth=None)        # Default n_estimators and max_depth values
 
 
@@ -16,13 +17,18 @@ random_forest = skl.ensemble.RandomForestClassifier(random_state=RANDOM_STATE, n
 def current_time():
     return datetime.now().strftime("%H:%M:%S.%f")
 
+# Train the model on the trainign data. Data is loaded from pre-calculated data in CSV
 def train_model():
     print("{} - Loading training data from {}, training decision engine.".format(current_time(), DATA_PATH))
 
+    #  Load the training data from CSV and split into features and labels
     data = pd.read_csv(DATA_PATH)
+    # Drop the photo_number and component_name columns from the features
     x = data.drop(columns=['photo_number', 'component_name'])
+    # Set the labels to the component_name column
     y = data['component_name']
 
+    # Train the random forest classifier on the training data
     random_forest.fit(x, y)
 
     print("{} - Decision engine trained.".format(current_time()))
