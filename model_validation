@@ -22,26 +22,23 @@ if __name__ == "__main__":
     y = data['component_name']
 
     from sklearn.model_selection import train_test_split
-    x_train2, x_test2, y_train2, y_test2 = train_test_split(x, y, test_size=0.2, random_state=RANDOM_STATE)
-    print("{} - Test and train set generated (train_test_split). Training Random Forest.".format(current_time()))
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=RANDOM_STATE)
+    print("{} - Test and train set generated (train_test_split). Training random forest.".format(current_time()))
 
     random_forest = skl.ensemble.RandomForestClassifier(random_state=RANDOM_STATE, n_estimators=100, max_depth=None)        # Default n_estimators and max_depth values
 
     train_starttime = datetime.now()
-    random_forest.fit(x_train2, y_train2)
-    print("{} - Random Forest trained in {} seconds.".format(current_time(), (datetime.now() - train_starttime).total_seconds()))
+    random_forest.fit(x_train, y_train)
+    print("{} - Random forest trained in {} seconds.".format(current_time(), (datetime.now() - train_starttime).total_seconds()))
     
-    print("{} - Scorign Random Forest.".format(current_time()))
-    y_predicted = random_forest.predict(x_test2)
-    accuracy = skl.metrics.accuracy_score(y_test2, y_predicted)
-
-    print("{} - Random Forest Accuracy: {} %".format(current_time(), (round(accuracy * 100, 3))))
-
-
-
+    print("{} - Scoring random forest.".format(current_time()))
+    y_predicted = random_forest.predict(x_test)
+    accuracy = skl.metrics.accuracy_score(y_test, y_predicted)
+    f1 = skl.metrics.f1_score(y_predicted, y_test, average='weighted')
+    print("{} - Random rorest accuracy: {} %, with an f1 score of: {}.".format(current_time(), (round(accuracy * 100, 3)), round(f1, 3)))
 
     if DISPLAY_CONFUSION_MATRIX:
-        ConfusionMatrixDisplay.from_predictions(y_test2, y_predicted, display_labels=random_forest.classes_, cmap=plt.cm.Blues)
+        ConfusionMatrixDisplay.from_predictions(y_test, y_predicted, display_labels=random_forest.classes_, cmap=plt.cm.Blues)
         plt.xlabel('Predicted')
         plt.ylabel('Actual')
         plt.title('Confusion Matrix')
