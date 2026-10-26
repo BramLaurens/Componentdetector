@@ -10,7 +10,7 @@ import os
 #surpress ffmpeg log messages
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "loglevel;error"
 
-photos_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photosblue")
+photos_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photos/train_photos/DATASET_BLUE_21091417")
 os.makedirs(photos_directory, exist_ok=True)
 
 app = customtkinter.CTk()
