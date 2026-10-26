@@ -77,6 +77,7 @@ if __name__ == "__main__":
             break
 
         h, w, c = frame.shape
+        # Important, the frame is cropped to remove the turntable edges
         frame = frame[0:h, 160:w-200]
 
         frame_parameters = calculate_parameters(frame)
