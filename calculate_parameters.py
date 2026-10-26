@@ -28,6 +28,8 @@ EMPTYREFERENCE_PATH = "emptyphotos/empty_reference.jpg"  # Path where the empty 
 
 # Module level variables for use in live demo
 last_fft_image = None
+last_body_binary_mask = None
+last_bodynolead_mask = None
 
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
@@ -502,8 +504,18 @@ def calculate_parameters(photo: cv.typing.MatLike):
     # Create binary mask of the component. Value greater than 40 is fg. *255 to create binary
     component_binary_mask = fg = ((component_diff_from_empty > 40).astype(np.uint8) * 255)
     component_binary_mask = component_binary_mask[0:h, 160:w-200]
+
+    
+
     # Crop out the pins of the component, filter out small noise
     body_mask =  body_mask_diff(component_binary_mask, lead_width=10, min_area=300)
+
+    # Store the last body binary mask and last body no lead mask for use in live_demo.py
+    global last_body_binary_mask 
+    last_body_binary_mask = component_binary_mask
+    global last_bodynolead_mask 
+    last_bodynolead_mask = body_mask
+
 
     photo_cropped = crop_to_component(photo)
 
