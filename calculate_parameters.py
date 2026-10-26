@@ -333,9 +333,6 @@ def body_mask_diff_pipeline(img):
     # Create a binary mask from the difference image, where pixels with a difference greater than 40 are considered foreground, only shows white pixels where the component is, not the entire image
     fg = ((diff > 40).astype(np.uint8) * 255)
 
-    #crop out the turntable edges
-    h, w = fg.shape
-    fg = fg[0:h, 160:w-200]
     # Calculate the body mask from the foreground mask using morphological operations
     body = body_mask_diff(fg, lead_width=10, min_area=300)
 
@@ -405,7 +402,7 @@ def find_circles(body_mask: cv.typing.MatLike):
             cv.circle(vis,(i[0], i[1]), i[2], (0, 255, 0), 2)
             cv.circle(vis,(i[0], i[1]), 2, (0, 0, 255), 3)
         cv.imshow("Hough Circles", vis)
-        # cv.waitKey(0)
+        cv.waitKey(0)
 
     return circles
 
@@ -581,6 +578,85 @@ def calculate_fill_factor(photo: cv.typing.MatLike):
 
     return fill_factor
 
+def straighten_body(photo: cv.typing.MatLike, body_mask: cv.typing.MatLike):
+    contours, _ = cv.findContours(body_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    if not contours:
+        return None, None
+
+    # Find the largest contour from the contours list
+    contour = max(contours, key=cv.contourArea)
+    # Save the center coordinates, width, height and angle of the rectangle that fits around the contour
+    (cx, cy), (w, h), angle = cv.minAreaRect(contour)
+    # Create a rotation matrix to rotate the image around the center of the rectangle by the angle of the rectangle
+    rotation = cv.getRotationMatrix2D((cx, cy), angle, 1.0)
+    img_h, img_w = body_mask.shape
+    rotated_photo = cv.warpAffine(photo, rotation, (img_w, img_h))
+    rotated_body_mask = cv.warpAffine(body_mask, rotation, (img_w, img_h), flags=cv.INTER_NEAREST) #We use INTER_NEAREST to keep the mask simple white or black, no gray after rotation
+
+    # Crop to the body mask, to remove the black borders created by the rotation
+    x, y, bw, bh, = cv.boundingRect(rotated_body_mask)
+    body = rotated_photo[y:y+bh, x:x+bw]
+    mask = rotated_body_mask[y:y+bh, x:x+bw]
+
+    # Make sure the long side is horizontal, if not, rotate 90 degrees
+    if bw < bh:
+        body = cv.rotate(body, cv.ROTATE_90_CLOCKWISE)
+        mask = cv.rotate(mask, cv.ROTATE_90_CLOCKWISE)
+
+    if ENABLE_VERBOSE:
+        cv.imshow("Rotated Body", body)
+        cv.imshow("Rotated Mask", mask)
+        cv.waitKey(0)
+    return body, mask
+
+# Counts the color bands across the body
+def count_bands(photo: cv.typing.MatLike, body_mask: cv.typing.MatLike):
+    BAND_THRESHOLD = 25     # How different (in LAB color distance) a column must be from the body color to count as a band
+    END_TRIM = 0.05         # Ignore 5% at both ends, where the body meets the leads
+
+    body, mask = straighten_body(photo, body_mask)
+    if body is None or body.shape[1] < 10:
+        return 0
+
+    h, w = mask.shape
+
+    # Only use the middle half of the rows; the top and bottom edges are shadowy and unreliable
+    rows = slice(h // 4, 3 * h // 4)
+    lab = cv.cvtColor(body, cv.COLOR_BGR2LAB).astype(np.float32)[rows]
+    inside = mask[rows] > 0
+
+    if np.count_nonzero(inside) == 0:
+        return 0
+
+    # The "normal" body color: the median, so the bands themselves barely influence it
+    body_color = np.median(lab[inside], axis=0)
+
+    # Color distance of every pixel to the body color
+    distance = np.linalg.norm(lab - body_color, axis=2)
+
+    # Profile: average distance per column, only over pixels inside the mask
+    pixels_per_column = np.maximum(inside.sum(axis=0), 1)
+    profile = (distance * inside).sum(axis=0) / pixels_per_column
+
+    # Light smoothing against pixel noise, then cut off the ends
+    profile = np.convolve(profile, np.ones(3) / 3, mode="same")
+    trim = int(w * END_TRIM)
+    profile = profile[trim:w - trim]
+
+    # Count how often the profile rises above the threshold: each rise is one band
+    above = profile > BAND_THRESHOLD
+    band_count = np.count_nonzero(np.diff(above.astype(np.int8)) == 1) + int(above[0])
+
+    if ENABLE_VERBOSE:
+        print("Bands found: {}".format(band_count))
+        cv.imshow("Straightened body", cv.resize(body, None, fx=4, fy=4, interpolation=cv.INTER_NEAREST))
+        plt.plot(profile, label="color difference")
+        plt.axhline(BAND_THRESHOLD, color="red", linestyle="--", label="threshold")
+        plt.legend()
+        plt.show()
+
+    return band_count
+
 # Main program
 if __name__ == "__main__":
 
@@ -620,6 +696,8 @@ if __name__ == "__main__":
         body_mask = body_mask_diff_pipeline(photo)
         circles = find_circles(body_mask)
         circle_coverage = circle_edge_coverage(body_mask, circles)
+        straightened_body, straightened_mask = straighten_body(photo, body_mask)
+        band_count = count_bands(straightened_body, straightened_mask)
         # aspect_ratio = body_aspect_ratio(body_mask)
         # photo_cropped = crop_to_component(photo)
         # # rubberband(photo)
@@ -631,7 +709,7 @@ if __name__ == "__main__":
         # test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
         # test_result_dict["fill_factor"].append(calculate_fill_factor(photo))
         # test_result_dict["aspect_ratio"].append(aspect_ratio)
-        test_result_dict["circle_coverage"].append(circle_coverage)
+        # test_result_dict["circle_coverage"].append(circle_coverage)
 
         # fft_test = frequency_domain_test(photo_cropped)
 
