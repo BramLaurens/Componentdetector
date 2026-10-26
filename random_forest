@@ -3,10 +3,13 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from datetime import datetime
+from sklearn.metrics import ConfusionMatrixDisplay
 
 DATA_PATH = "calculated_data.csv"
 TESTSET_N_PER_CLASS = 50  # Number of samples per class for the test set
 RANDOM_STATE = 42
+
+DISPLAY_CONFUSION_MATRIX = True
 
 # A function that returns a string of formatted time.
 def current_time():
@@ -52,7 +55,8 @@ if __name__ == "__main__":
 
     x_test = test_set.drop(columns=['photo_number', 'component_name'])
     y_test = test_set['component_name']
-    print("{} - Test and train set generated. Training Random Forest.".format(current_time()))
+
+    print("{} - Test and train set generated (generate_test_train). Training Random Forest.".format(current_time()))
 
     random_forest = skl.ensemble.RandomForestClassifier(random_state=RANDOM_STATE, n_estimators=100, max_depth=None)        # Default n_estimators and max_depth values
 
@@ -65,3 +69,35 @@ if __name__ == "__main__":
     accuracy = skl.metrics.accuracy_score(y_test, y_predicted)
 
     print("{} - Random Forest Accuracy: {} %".format(current_time(), (round(accuracy * 100, 3))))
+
+
+
+    print("------------------------------------------------------------------------------------")
+
+    from sklearn.model_selection import train_test_split
+    x_train2, x_test2, y_train2, y_test2 = train_test_split(x, y, test_size=0.2, random_state=RANDOM_STATE)
+    print("{} - Test and train set generated (train_test_split). Training Random Forest.".format(current_time()))
+
+    random_forest = skl.ensemble.RandomForestClassifier(random_state=RANDOM_STATE, n_estimators=100, max_depth=None)        # Default n_estimators and max_depth values
+
+    train_starttime = datetime.now()
+    random_forest.fit(x_train2, y_train2)
+    print("{} - Random Forest trained in {} seconds.".format(current_time(), (datetime.now() - train_starttime).total_seconds()))
+    
+    print("{} - Scorign Random Forest.".format(current_time()))
+    y_predicted = random_forest.predict(x_test2)
+    accuracy = skl.metrics.accuracy_score(y_test2, y_predicted)
+
+    print("{} - Random Forest Accuracy: {} %".format(current_time(), (round(accuracy * 100, 3))))
+
+
+
+
+    if DISPLAY_CONFUSION_MATRIX:
+        ConfusionMatrixDisplay.from_predictions(y_test2, y_predicted, display_labels=random_forest.classes_, cmap=plt.cm.Blues)
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        plt.title('Confusion Matrix')
+        plt.show()
+
+    
