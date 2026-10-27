@@ -26,6 +26,11 @@ TESTPHOTO_PATH = "photos/train_photos/DATASET_BLUE_21091417"               # Pat
 EMPTYPHOTO_PATH = "emptyphotos"
 EMPTYREFERENCE_PATH = "emptyphotos/empty_reference.jpg"  # Path where the empty reference photo is found. This photo is used to subtract the turntable from the image, so only the component remains.
 
+# Module level variables for use in live demo
+last_fft_image = None
+last_body_binary_mask = None
+last_bodynolead_mask = None
+
 photo_count = 0                         # Stores the total count of processed images
 test_result_dict = {                    # Stores all the information about the processed images. More entries are created in the main function 
     "photo_number"          : [],
@@ -50,13 +55,16 @@ def get_component_name(file_path: str):
 #   - This function includes the connection arms found on all electrical components TODO Fix this
 #   - After the laplacian function, a couple white "blobs" can be seen in the background, these are also counted in the total circumference count.
 def circumference(photo_body: cv.typing.MatLike):
+    # RETR_EXT only retreives outer, NONE to not compress points
     contours, _ = cv.findContours(photo_body, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 
+    # Find the largest contour
     if contours:
         largest_contour = max(contours, key=cv.contourArea)
     else:
         return 0
 
+    # Calculate the circumference of the largest contour
     circumference = cv.arcLength(largest_contour, True)
 
     if ENABLE_VERBOSE:
@@ -70,29 +78,33 @@ def circumference(photo_body: cv.typing.MatLike):
     return circumference
 
 
+# This function counts the uniqie colors in the foto
+# The return is number of unique colors / area
 def count_unique_colors(photo: cv.typing.MatLike):
     # To create a body mask, we use the s channel of the HSV colorspace
     photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV_FULL)
 
+    # Split H S V
     h, s, v = cv.split(photo_HSV)
 
-    # Increase contrast by 1.1 to make some connectors more visible, and apply a threshold
-    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)                    
+    # Increase contrast by 1.1 to make some components more visible, and apply a threshold
+    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)   
+    # All S vals above 100 are fg, below bg.
     ret, thresh = cv.threshold(s, 100, 255, cv.THRESH_BINARY)
 
-    # Apply mask to image using bitwise AND
+    # Apply mask to image using bitwise AND. Result is body with only high sat pixels
     body_masked = cv.bitwise_and(photo, photo, mask=thresh)
 
     # Reshape the body_masked image to a 2D array of shape (num_pixels, 3). We basically throw away the positional information and keep the colors only.
     # The reshape takes new dimensions as parameters, in which -1 lets numpy calculate this itself.
     colors_array = body_masked.reshape(-1, body_masked.shape[2])
 
-    # Convert the MatLike into uint8 values for h, s, v. This is possible since the photo is flattened to a 2D array in the above line.
+    # Convert the MatLike into uint8 values for coumns 1, 2,3  h, s, v. This is possible since the photo is flattened to a 2D array in the above line.
     b = colors_array[:, 0].astype(np.uint32)
     g = colors_array[:, 1].astype(np.uint32)
     r = colors_array[:, 2].astype(np.uint32)
 
-    # Use bitwise operators to add h, s and v after eachother.
+    # Use bitwise operators to add h, s and v after eachother in one number.
     # Since h, s, and v are arrays, color_ids is now a 1D array with colors for all pixels in the image (saved as a single number)'
     color_ids = ((b << 16) | (g << 8) | r)
 
@@ -103,6 +115,7 @@ def count_unique_colors(photo: cv.typing.MatLike):
     oppervlakte = max(1, cv.countNonZero(thresh))
 
 
+    # Return number of unique colors divided by area
     return(len(values) / oppervlakte)
     # return 1
 
@@ -183,6 +196,7 @@ def load_empty_reference():
 
 # clacluate the differece between the current image and the empty reference image, returns a 2D array of the difference
 def difference_from_empty(img):
+    # Load the empty reference image, if it does not exist, it builds it first
     ref = load_empty_reference()
     a_blur = cv.GaussianBlur(img,(5,5), 0)
     b_blur = cv.GaussianBlur(ref,(5,5), 0)
@@ -233,7 +247,9 @@ def body_mask_diff_pipeline(img):
         # cv.waitKey(0)
     return body
 
+# This function calculates the aspect ratio of the body mask, long / short side
 def body_aspect_ratio(body_mask: cv.typing.MatLike):
+    # Find contours, only extenal, chain approximattted to save memory
     contours,_ = cv.findContours(body_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     if not contours:
         return 0
@@ -246,7 +262,7 @@ def body_aspect_ratio(body_mask: cv.typing.MatLike):
     # Prevent division by zero, if either width or height is 0, return 0
     if min(w,h) == 0:
         return 0
-    # Calculate the aspect ratio of the body mask, which is the longest side divided by the shortest side
+    # Calculate the aspect ratio of the body mask, which is the longest side divided by the shortest side (largest of w,h div smallest of w,h)
     ratio = max(w,h) / min(w,h)
     if ENABLE_VERBOSE:
         box = cv.boxPoints(((cx, cy), (w,h), angle)).astype(np.int32)
@@ -296,40 +312,45 @@ def find_circles(body_mask: cv.typing.MatLike):
 
 # Calculate how much o the total edge is covered by circles. Returns a coverageratio between 0 and 1.
 def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
-    # How much the circle may be off edge to count
+    # How much pixls the circle may be off edge to count
     EDGE_TOLERANCE = 5
-    # How much of the circle msut be on edge to count
+    # How much of one detected circle msut be on edge to count
     min_edge_percentage = 0.3
 
     if circles.size == 0:
         return 0.0
 
-    # Draw body contours as thick white band
+    # Find contours of the body mask to get the edge of the component
     contours, _ = cv.findContours(body_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    # Set up empty arrays for edge and edge overlap
     edge = np.zeros_like(body_mask)
     edge_overlap = np.zeros_like(body_mask)
 
-    # Draw thin line of contours of edge
+    # Draw thin line of contours of edge on edge array. -1 so draw all contours, 255 for white, 1 for thickness
     cv.drawContours(edge, contours, -1, 255, 1)
 
     # Thick edge band used to check overlap
     edge_band = np.zeros_like(body_mask)
     cv.drawContours(edge_band, contours, -1, 255, EDGE_TOLERANCE)
 
+    # Count number of edge pixels
     edge_pixels = cv.countNonZero(edge)
     if edge_pixels == 0:
         return 0.0
 
+    # Set up empty array to keep track of which edge pixels are covered by circles
     covered = np.zeros_like(body_mask)
 
 
     # Loop through all circles and count how many pixels of the edge are covered by the circle. The coverage ratio is calculated as the number of edge pixels covered by the circle divided by the total number of edge pixels.
     height, width = body_mask.shape[:2]
     for cx, cy, r in circles:
-        cx, cy, r = int(cx), int(cy), int(r)
+        cx, cy, r = int(cx), int(cy), int(r) #convert to int, since cv.HoughCircles returns float values
+        # Skip circles that are completely outside the image
         if not (0 <= cx < width and 0 <= cy < height):
             continue
 
+        # Skip circles that are completely outside the body mask 2
         if body_mask[cy, cx] == 0:
             continue
 
@@ -339,6 +360,7 @@ def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
 
         # Check how much % of the circle is actually on the edge, if less than min_edge_percentage, skip this circle
         circle_pixels = cv.countNonZero(circle_img)
+        # Count how many pixels of the circle are on the edge band, if less than min_edge_percentage, skip this circle
         on_edge = cv.countNonZero(cv.bitwise_and(circle_img, edge_band))
         if circle_pixels == 0 or on_edge / circle_pixels < min_edge_percentage:
                 continue
@@ -346,7 +368,9 @@ def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
         # If accepted, add the circle to the covered image with thickness of EDGE_TOLERANCE, so that the edge is covered by the circle
         cv.circle(covered, (cx, cy), r, 255, EDGE_TOLERANCE)
 
+    # Drop pixels that are not on the edge, so that only the edge pixels are counted as covered
     edge_overlap = cv.bitwise_and(covered, edge)
+    # Calculate the coverage ratio as the number of edge pixels covered by circles divided by the total number of edge pixels
     coverage_ratio = cv.countNonZero(edge_overlap) / edge_pixels
 
     if ENABLE_VERBOSE:
@@ -356,28 +380,35 @@ def circle_edge_coverage(body_mask: cv.typing.MatLike, circles: np.ndarray):
         cv.waitKey(0)
     return coverage_ratio
 
-
+# FFTlines function, returns the number of lines found in the photo using FFT and Hough transform. 
+# The function first converts the photo to grayscale, then applies FFT and shifts the zero frequency component to the center. 
+# The magnitude spectrum is calculated and thresholded to create a binary image. Finally, HoughLinesP is used to detect lines in the binary image. 
+# The function returns the total number of lines found.
 def fft_lines(photo: cv.typing.MatLike):
+    # Convert photo to grayscale, needed for FFT and Hough transform
     photo_gray = cv.cvtColor(photo, cv.COLOR_BGR2GRAY)
 
-    # Peform FFT and shift so it's centered.
+    # Peform FFT and shift so it's centered with DC at center
     photo_fft = np.fft.fft2(photo_gray)
     photo_fft_shift = np.fft.fftshift(photo_fft)
 
     # Calculate magnitude spectrum for grayscale (log scale to make frequencies visible)
     magnitude_gray = 20 * np.log(np.abs(photo_fft_shift) + 1)
-    # Normalize to [0, 255] for OpenCV rendering
+    # Normalize to [0, 255]
     magnitude_gray = cv.normalize(magnitude_gray, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
 
+    # Apply threshold to the binary magnitude image 
     ret, magnitude_thresh = cv.threshold(magnitude_gray, 150, 255, cv.THRESH_BINARY)
 
+
+    # Detect lines using HoughLinesP
     lines = cv.HoughLinesP(
-        magnitude_thresh, 
-        rho=1, 
-        theta=np.pi / 180, 
-        threshold=20, 
-        minLineLength=30, 
-        maxLineGap=40
+        magnitude_thresh, # Input image (binary magnitude spectrum)
+        rho=1,           # Distance resolution 
+        theta=np.pi / 180, # Angle resolution in radians
+        threshold=20,       # Minimum number of intersections to detect a line
+        minLineLength=30,   # Minimum length of a line to be accepted
+        maxLineGap=40       # Maximum allowed gap between line segments to treat them as a single line
     )
 
     if ENABLE_VERBOSE:
@@ -415,9 +446,20 @@ def fft_lines(photo: cv.typing.MatLike):
     else:
         total_lines = 0
 
+    # Store the last FFT image for use in live_demo.py
+    global last_fft_image
+    # Convert magnitude_gray to BGR for visualization, so that the lines can be drawn in color
+    fft_display = cv.cvtColor(magnitude_gray, cv.COLOR_GRAY2BGR)
+    if lines is not None:
+        for line in lines:
+            x1, y1, x2, y2 = line.ravel()
+            cv.line(fft_display, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    last_fft_image = fft_display
+
+
     return total_lines
 
-
+# Calculaes the fill factor of the component as masked component area / convex hull area. Returns a float between 0 and 1.
 def calculate_fill_factor(masked_component: cv.typing.MatLike):
     points = cv.findNonZero(masked_component)           # Find non zero points and saave the coordinates of those.
     if points is None:
@@ -450,15 +492,30 @@ def calculate_fill_factor(masked_component: cv.typing.MatLike):
 
 
 # Function to call in live_demo.py
+# Input is raw photo, output is a pandas dataframe with all calculated parameters.
+# This function is used in live_demo.py to calculate the parameters of the component in the photo.
 def calculate_parameters(photo: cv.typing.MatLike):
     ##-- Pre processing --##
     h, w, c = photo.shape
 
     # Mask the component from the background. This is done here to allow all functions to access component and body mask.
+    #Empty reference image should already be built before this function is called, if not, it will be built automatically.
     component_diff_from_empty = difference_from_empty(photo)
+    # Create binary mask of the component. Value greater than 40 is fg. *255 to create binary
     component_binary_mask = fg = ((component_diff_from_empty > 40).astype(np.uint8) * 255)
     component_binary_mask = component_binary_mask[0:h, 160:w-200]
+
+    
+
+    # Crop out the pins of the component, filter out small noise
     body_mask =  body_mask_diff(component_binary_mask, lead_width=10, min_area=300)
+
+    # Store the last body binary mask and last body no lead mask for use in live_demo.py
+    global last_body_binary_mask 
+    last_body_binary_mask = component_binary_mask
+    global last_bodynolead_mask 
+    last_bodynolead_mask = body_mask
+
 
     photo_cropped = crop_to_component(photo)
 
@@ -472,11 +529,12 @@ def calculate_parameters(photo: cv.typing.MatLike):
         "circle_coverage": [circle_edge_coverage(body_mask, find_circles(body_mask))]
     }
 
+    # Return the calculated parameters as a pandas DataFrame, with each parameter as a column and a single row of values.
     return pd.DataFrame(data = return_dict)
     
 
 
-# Main program
+# Main program, usefd for testing the functions in this file. This is not used in the live_demo.py file.
 if __name__ == "__main__":
     ##-- Processing --##
     # Create the necessary lists in the test_result_dict, every test needs a list.
