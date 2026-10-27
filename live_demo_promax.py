@@ -329,6 +329,7 @@ class RecognitionApp(ctk.CTk):
         self.latest_params = None         # dict {column: value} from calculate_parameters
         self.latest_debug_frames = {}     # {name: image} last_* images from calculate_parameters.py
         self.frames_window = None         # live frames window (only one at a time)
+        self.latest_top3 = []             # [(class name, probability)] from predict_proba, best first
 
         self._build_layout()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -345,7 +346,7 @@ class RecognitionApp(ctk.CTk):
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_rowconfigure(20, weight=1)
 
-        ctk.CTkLabel(side, text="Component\nRecognition",
+        ctk.CTkLabel(side, text="Beeldherkenning Demo! \n Componenten herkennen!",
                      font=ctk.CTkFont(size=22, weight="bold")).grid(
             row=0, column=0, padx=20, pady=(20, 15))
 
@@ -440,12 +441,36 @@ class RecognitionApp(ctk.CTk):
                      font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
             row=0, column=1, sticky="ew", padx=(10, 0), pady=(0, 6))
 
-        self.params_panel = ctk.CTkScrollableFrame(main, width=230, corner_radius=12, border_width=2)
-        self.params_panel.grid(row=1, column=1, sticky="ns", padx=(10, 0))
+        # Right column: parameters panel (grows) with the top 3 box underneath
+        right = ctk.CTkFrame(main, fg_color="transparent")
+        right.grid(row=1, column=1, sticky="ns", padx=(10, 0))
+        right.grid_rowconfigure(0, weight=1)
+
+        self.params_panel = ctk.CTkScrollableFrame(right, width=230, corner_radius=12, border_width=2)
+        self.params_panel.grid(row=0, column=0, sticky="ns")
         self.params_panel.grid_columnconfigure(0, weight=1)
         self.params_empty = ctk.CTkLabel(self.params_panel, text="No data yet", text_color="gray60")
         self.params_empty.grid(row=0, column=0, columnspan=2, pady=10)
         self.param_value_labels = {}       # column name -> CTkLabel showing its value
+
+        # Top 3 predictions with probability (name, percentage and a bar per row)
+        top3_box = ctk.CTkFrame(right, corner_radius=12, border_width=2)
+        top3_box.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        top3_box.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(top3_box, text="Top 3", font=ctk.CTkFont(size=14, weight="bold"),
+                     anchor="w").grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=(8, 2))
+        self.top3_rows = []                # [(name label, percent label, progress bar)] x3
+        for i in range(3):
+            name = ctk.CTkLabel(top3_box, text="-", anchor="w",
+                                font=ctk.CTkFont(size=13, weight="bold" if i == 0 else "normal"))
+            name.grid(row=1 + 2 * i, column=0, sticky="ew", padx=(12, 4))
+            pct = ctk.CTkLabel(top3_box, text="", anchor="e", font=ctk.CTkFont(family="Consolas", size=13))
+            pct.grid(row=1 + 2 * i, column=1, sticky="e", padx=(4, 12))
+            bar = ctk.CTkProgressBar(top3_box, height=8)
+            bar.grid(row=2 + 2 * i, column=0, columnspan=2, sticky="ew", padx=12,
+                     pady=(0, 10 if i == 2 else 6))
+            bar.set(0)
+            self.top3_rows.append((name, pct, bar))
 
         self.log_box = ctk.CTkTextbox(main, height=110, state="disabled")
         self.log_box.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
@@ -583,7 +608,9 @@ class RecognitionApp(ctk.CTk):
             self.latest_frame = None
             self.latest_params = None
             self.latest_debug_frames = {}
+            self.latest_top3 = []
         self.clear_params_panel()
+        self.update_top3([])
         self.video_label.configure(image=None, text="No stream connected")
         try:
             self.video_label._label.configure(image="")   # CTkLabel keeps the old image otherwise
@@ -630,6 +657,7 @@ class RecognitionApp(ctk.CTk):
                     model = self.model
 
                 label = "-"
+                top3 = []                                       # [(class name, probability)], best first
                 # Calculate the params every frame (also without a model) so the panel stays live
                 params = None
                 params_dict = None
@@ -650,7 +678,27 @@ class RecognitionApp(ctk.CTk):
                     if params is not None:
                         try:
                             # Predict the label using the model and the calculated parameters, format to string
-                            label = str(model.predict(params)[0])
+                            # Calculate the probabilities for each class and find the class with the highest probability
+                            # predict_priba returns a 2D array with probabilities for each class, we only have one sample (row), so take the first row [0]
+                            probailities = model.predict_proba(params)[0]
+                            best_class = probailities.argmax()
+                            label = str(model.classes_[best_class])
+                            confidence = probailities[best_class]
+
+                            # Find the top 3 classes with the highest probabilities
+                            # Indices of the probabilities, sorted from low to high
+                            sorted_indices = np.argsort(probailities)
+                            # omkereeen, step backwards
+                            sorted_indices = sorted_indices[::-1]
+                            # Keep only the top 3
+                            top_indices = sorted_indices[:3]
+
+                            # Build a list of (class name, probability) pairs, best first
+                            top3 = [] #init
+                            for index in top_indices:
+                                class_name = str(model.classes_[index])
+                                probability = float(probailities[index])
+                                top3.append((class_name, probability))
                         except Exception as e:
                             label = "error"
                             if str(e) != last_error:
@@ -672,6 +720,7 @@ class RecognitionApp(ctk.CTk):
                     self.latest_prediction = label
                     self.latest_params = params_dict
                     self.latest_debug_frames = debug_frames
+                    self.latest_top3 = top3
                     self.fps = 0.9 * self.fps + 0.1 * fps
         finally:
             cap.release()
@@ -701,6 +750,19 @@ class RecognitionApp(ctk.CTk):
                 text = str(value)
             self.param_value_labels[name].configure(text=text)
 
+    # Fill the 3 rows of the top 3 box. Fewer than 3 classes (or no model yet) -> remaining rows show "-".
+    def update_top3(self, top3):
+        for i, (name_label, pct_label, bar) in enumerate(self.top3_rows):
+            if i < len(top3):
+                name, prob = top3[i]
+                name_label.configure(text=name)
+                pct_label.configure(text=f"{prob * 100:.0f} %")
+                bar.set(prob)
+            else:
+                name_label.configure(text="-")
+                pct_label.configure(text="")
+                bar.set(0)
+
     def clear_params_panel(self):
         for child in self.params_panel.winfo_children():
             child.destroy()
@@ -715,9 +777,11 @@ class RecognitionApp(ctk.CTk):
             pred = self.latest_prediction
             fps = self.fps
             params = self.latest_params
+            top3 = self.latest_top3
 
         if params is not None:
             self.update_params_panel(params)
+            self.update_top3(top3)
 
         if frame is not None:
             # Size to the surrounding box (not the label) so the view can't grow itself
