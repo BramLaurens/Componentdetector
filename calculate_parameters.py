@@ -472,7 +472,7 @@ def calculate_fill_factor(masked_component: cv.typing.MatLike):
     if convex_hull_area == 0:
         fill_factor = 0     # prevent DIV0 error
     else:
-        fill_factor =  mask_area / convex_hull_area
+        fill_factor =  min(1, (mask_area / convex_hull_area))
 
 
     if ENABLE_VERBOSE:
