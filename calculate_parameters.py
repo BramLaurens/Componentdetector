@@ -81,7 +81,7 @@ def circumference(photo_body: cv.typing.MatLike):
 # This function counts the uniqie colors in the foto
 # The return is number of unique colors / area
 def count_unique_colors(photo: cv.typing.MatLike, mask):
-    # Apply mask to image using bitwise AND. Result is body with only high sat pixels
+    # Apply mask to image using bitwise AND.
     body_masked = cv.bitwise_and(photo, photo, mask=mask)
 
     # Reshape the body_masked image to a 2D array of shape (num_pixels, 3). We basically throw away the positional information and keep the colors only.
@@ -98,15 +98,13 @@ def count_unique_colors(photo: cv.typing.MatLike, mask):
     color_ids = ((b << 16) | (g << 8) | r)
 
     # Use numpy's array.unique() function to find all uniques in the color_ids array. 
-    values, counts = np.unique(color_ids, return_counts=True)
+    values = np.unique(color_ids, return_counts=False)
 
     # Calculate area, minimum must be 1 to avoid devision by 0
     oppervlakte = max(1, cv.countNonZero(mask))
 
-
     # Return number of unique colors divided by area
     return(len(values) / oppervlakte)
-    # return 1
 
 # This function creates a snippit out of the original photo which only includes the component
 # Known limitation: Function currently only works for photos with a single component. If multiple components are visible, it will crop around both components.
