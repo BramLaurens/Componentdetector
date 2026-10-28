@@ -80,20 +80,9 @@ def circumference(photo_body: cv.typing.MatLike):
 
 # This function counts the uniqie colors in the foto
 # The return is number of unique colors / area
-def count_unique_colors(photo: cv.typing.MatLike):
-    # To create a body mask, we use the s channel of the HSV colorspace
-    photo_HSV = cv.cvtColor(photo, cv.COLOR_BGR2HSV_FULL)
-
-    # Split H S V
-    h, s, v = cv.split(photo_HSV)
-
-    # Increase contrast by 1.1 to make some components more visible, and apply a threshold
-    s = cv.convertScaleAbs(s, alpha=1.1, beta=0)   
-    # All S vals above 100 are fg, below bg.
-    ret, thresh = cv.threshold(s, 100, 255, cv.THRESH_BINARY)
-
+def count_unique_colors(photo: cv.typing.MatLike, mask):
     # Apply mask to image using bitwise AND. Result is body with only high sat pixels
-    body_masked = cv.bitwise_and(photo, photo, mask=thresh)
+    body_masked = cv.bitwise_and(photo, photo, mask=mask)
 
     # Reshape the body_masked image to a 2D array of shape (num_pixels, 3). We basically throw away the positional information and keep the colors only.
     # The reshape takes new dimensions as parameters, in which -1 lets numpy calculate this itself.
@@ -112,7 +101,7 @@ def count_unique_colors(photo: cv.typing.MatLike):
     values, counts = np.unique(color_ids, return_counts=True)
 
     # Calculate area, minimum must be 1 to avoid devision by 0
-    oppervlakte = max(1, cv.countNonZero(thresh))
+    oppervlakte = max(1, cv.countNonZero(mask))
 
 
     # Return number of unique colors divided by area
@@ -577,7 +566,7 @@ if __name__ == "__main__":
 
         ##-- Parameter functions --##
         test_result_dict["circumference"].append(circumference(body_mask))
-        test_result_dict["unique_colors"].append(count_unique_colors(photo_cropped))
+        test_result_dict["unique_colors"].append(count_unique_colors(photo, body_mask))
         test_result_dict["fill_factor"].append(calculate_fill_factor(component_binary_mask))
         test_result_dict["aspect_ratio"].append(body_aspect_ratio(body_mask))
         test_result_dict["circle_coverage"].append(circle_edge_coverage(body_mask, find_circles(body_mask)))
