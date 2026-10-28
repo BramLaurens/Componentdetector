@@ -570,7 +570,7 @@ if __name__ == "__main__":
         # Mask the component from the background. This is done here to allow all functions to access component and body mask.
         component_diff_from_empty = difference_from_empty(photo)
         component_binary_mask = fg = ((component_diff_from_empty > 40).astype(np.uint8) * 255)
-        component_binary_mask = component_binary_mask[0:h, 160:w-200]
+
         body_mask =  body_mask_diff(component_binary_mask, lead_width=10, min_area=300)
 
         photo_cropped = crop_to_component(photo)
