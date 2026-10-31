@@ -56,11 +56,11 @@ if __name__ == "__main__":
     # ff_plot.tick_params(axis='x', labelsize=PLT_FONT_SIZE, rotation=45, labelrotation_mode='xtick')
     # ff_plot.tick_params(axis='y', labelsize=PLT_FONT_SIZE)   
 
-    # ### ---- Body Aspect Rastio ---- ###
-    # plt.figure("Body Aspect Ratio Per Component", figsize=(16, 9 ), layout="constrained")
-    # plt.title("Body Aspect Ratio Per Component")
-    # ba_plot = sns.boxplot(x="component_name", y="body_aspect_ratio",
-    #                                    data=calculated_parameters)
+    ### ---- Body Aspect Rastio ---- ###
+    plt.figure("Body Aspect Ratio Per Component", figsize=(16, 9 ), layout="constrained")
+    plt.title("Body Aspect Ratio Per Component")
+    ba_plot = sns.boxplot(x="component_name", y="aspect_ratio",
+                                       data=calculated_parameters)
 
     ### ---- Edge Circle Coverage Ratio ---- ####
     plt.figure("Edge Circle Coverage Ratio Per Component", figsize=(16, 9 ), layout="constrained")

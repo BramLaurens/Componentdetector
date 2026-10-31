@@ -1,0 +1,13 @@
+\textbf{Aspect ratio}
+
+De aspect ratio is de verhouding tussen de lange en de korte zijde van de body van het component. Een vierkant component, zoals een IC, heeft een aspect ratio van ongeveer 1. Een langwerpig component, zoals een weerstand, heeft een veel hogere aspect ratio. Deze parameter wordt berekend met de functie in codefragment \ref{lst:body_aspect_ratio}, op basis van het body masker uit de vorige stap. Een systeemoverzicht van deze functie is te vinden in figuur \ref{fig:flow_body_aspect_ratio}.
+
+Eerst wordt met \textit{cv.findContours()} de omtrek van de witte gebieden in het masker opgezocht. Met \textit{cv.RETR\_EXTERNAL} wordt alleen de buitenste contour gezocht. Contouren van eventuele gaten in de body worden dus genegeerd. Met \textit{cv.CHAIN\_APPROX\_SIMPLE} worden niet alle punten van de contour opgeslagen, maar alleen de hoekpunten van rechte stukken. Dit scheelt geheugen, terwijl de vorm hetzelfde blijft. Als er geen contour gevonden wordt, geeft de functie 0 terug.
+
+Omdat het body masker uit de vorige stap al maar één gebied bevat, wordt er in principe maar één contour gevonden. Voor de zekerheid wordt toch met \textit{max()} de contour met de grootste oppervlakte gekozen, die wordt berekend met \textit{cv.contourArea}.
+
+Daarna wordt met \textit{cv.minAreaRect()} de kleinst mogelijke rechthoek om de contour heen gepast. Deze rechthoek mag gedraaid zijn. Het voordeel hiervan is dat het niet uitmaakt hoe het component op de foto ligt: een schuin liggende weerstand krijgt dezelfde aspect ratio als een recht liggende weerstand. De functie geeft het middelpunt, de breedte, de hoogte en de draaihoek van de rechthoek terug.
+
+OpenCV bepaalt zelf welke zijde de breedte en welke de hoogte is. Daarom wordt de aspect ratio berekend door de grootste van de twee te delen door de kleinste, met \textit{max(w,h) / min(w,h)}. Hierdoor is de aspect ratio altijd 1 of groter. Als een van de twee zijdes 0 is, geeft de functie 0 terug om delen door nul te voorkomen.
+
+Als \textit{ENABLE\_VERBOSE} aan staat, wordt de gevonden rechthoek met \textit{cv.boxPoints()} omgezet naar vier hoekpunten en in het rood op het masker getekend. Zo kan tijdens het testen gecontroleerd worden of de rechthoek goed om de body heen past.

@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt     # Matplotlib provides function to visualize 
 import pandas as pd                 # Pandas is used to store the collected paramterdata in an csv file, so it visualisation can happen without all calculations.
 
 
-ENABLE_VERBOSE = False
+ENABLE_VERBOSE = True
 CSV_NAME = "calculated_data.csv"
 
 
@@ -572,6 +572,11 @@ if __name__ == "__main__":
         component_binary_mask = fg = ((component_diff_from_empty > 40).astype(np.uint8) * 255)
         component_binary_mask = component_binary_mask[0:h, 160:w-200]
         body_mask =  body_mask_diff(component_binary_mask, lead_width=10, min_area=300)
+
+        if ENABLE_VERBOSE:
+            cv.imshow("Differnece from empty", component_diff_from_empty.astype(np.uint8))
+            cv.imshow("Component binary mask", component_binary_mask)
+            cv.imshow("Body mask", body_mask)
 
         photo_cropped = crop_to_component(photo)
 

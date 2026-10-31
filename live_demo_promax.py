@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, f1_score, ConfusionMatrixDisplay
 from sklearn.model_selection import train_test_split
 from matplotlib.figure import Figure
@@ -515,10 +516,16 @@ class RecognitionApp(ctk.CTk):
             # Initialize RF clafficfier
             model = RandomForestClassifier(random_state=RANDOM_STATE,
                                            n_estimators=100, max_depth=None)
+
+            # Initialize KNN classifier
+            modelknn = KNeighborsClassifier(n_neighbors=5)
+
             # Log the time taken to train the model
             t0 = time.time()
             # Train the actual RF model on the x and y data
             model.fit(x, y)
+            # Train the KNN model on the x and y data
+            modelknn.fit(x, y)
             # Update the model in a thread-safe manner (prevent race conditions like in FreeRTOS)
             with self.model_lock:
                 self.model = model
